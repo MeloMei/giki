@@ -107,3 +107,71 @@ def test_empty_entries_list(tmp_path):
     assert p.exists()
     content = p.read_text(encoding="utf-8")
     assert "<!-- giki:index-begin -->" in content
+
+
+from giki.wiki.index_log import LogEvent, append_to_log
+
+
+def test_log_creates_file_if_missing(tmp_path):
+    p = tmp_path / "log.md"
+    ev = LogEvent(
+        timestamp_iso="2026-06-30T14:00:00+08:00",
+        source_path="sources/note.md",
+        pages_created=["a", "b"],
+        pages_updated=[],
+        pages_failed=[],
+    )
+    append_to_log(p, ev)
+    assert p.exists()
+    content = p.read_text(encoding="utf-8")
+    assert "# Log" in content
+    assert "## 2026-06-30T14:00:00+08:00" in content
+    assert "**source:** `sources/note.md`" in content
+    assert "- created: [[a]], [[b]]" in content
+    assert "- updated: (none)" in content
+    assert "- failed: (none)" in content
+
+
+def test_log_prepends_newest_at_top(tmp_path):
+    p = tmp_path / "log.md"
+    ev1 = LogEvent("2026-06-30T14:00:00+08:00", "s/a.md", ["a"], [], [])
+    ev2 = LogEvent("2026-06-30T15:00:00+08:00", "s/b.md", ["b"], [], [])
+    append_to_log(p, ev1)
+    append_to_log(p, ev2)
+    content = p.read_text(encoding="utf-8")
+    i_ev2 = content.index("[[b]]")
+    i_ev1 = content.index("[[a]]")
+    assert i_ev2 < i_ev1
+
+
+def test_log_failed_list(tmp_path):
+    p = tmp_path / "log.md"
+    ev = LogEvent(
+        "2026-06-30T14:00:00+08:00",
+        "sources/x.md",
+        pages_created=["ok1"],
+        pages_updated=[],
+        pages_failed=["broken1", "broken2"],
+    )
+    append_to_log(p, ev)
+    content = p.read_text(encoding="utf-8")
+    assert "- created: [[ok1]]" in content
+    assert "- failed: [[broken1]], [[broken2]]" in content
+
+
+def test_log_all_empty_shows_nones(tmp_path):
+    p = tmp_path / "log.md"
+    ev = LogEvent("2026-06-30T14:00:00+08:00", "s/x.md", [], [], [])
+    append_to_log(p, ev)
+    content = p.read_text(encoding="utf-8")
+    assert "- created: (none)" in content
+    assert "- updated: (none)" in content
+    assert "- failed: (none)" in content
+
+
+def test_log_separator_between_events(tmp_path):
+    p = tmp_path / "log.md"
+    for i in range(3):
+        append_to_log(p, LogEvent(f"2026-06-30T{i:02d}:00:00+08:00", f"s/{i}.md", [], [], []))
+    content = p.read_text(encoding="utf-8")
+    assert content.count("\n---\n") >= 3

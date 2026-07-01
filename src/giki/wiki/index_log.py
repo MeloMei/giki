@@ -98,3 +98,55 @@ def _format_index_block(categorized: dict[str, dict[str, str]]) -> str:
             lines.append(f"- [[{slug}]] \u2014 {entries[slug]}")
         lines.append("")
     return "\n" + "\n".join(lines).rstrip() + "\n"
+
+
+_LOG_HEADER = """# Log
+
+_Chronological ingest log. Newest at top._
+
+"""
+
+
+@dataclass(frozen=True)
+class LogEvent:
+    timestamp_iso: str
+    source_path: str
+    pages_created: list[str]
+    pages_updated: list[str]
+    pages_failed: list[str]
+
+
+def append_to_log(log_path: Path, event: LogEvent) -> None:
+    """Prepend a new event to log.md (newest at top)."""
+    log_path = Path(log_path)
+    if not log_path.exists():
+        log_path.write_text(_LOG_HEADER, encoding="utf-8")
+
+    text = log_path.read_text(encoding="utf-8")
+    if not text.startswith("# Log"):
+        text = _LOG_HEADER + text
+
+    entry = _format_log_entry(event)
+
+    header_end = text.find("_\n\n")
+    if header_end != -1:
+        header_end += len("_\n\n")
+    else:
+        header_end = len(_LOG_HEADER)
+
+    new_text = text[:header_end] + entry + text[header_end:]
+    log_path.write_text(new_text, encoding="utf-8")
+
+
+def _format_log_entry(event: LogEvent) -> str:
+    def _format_list(items: list[str]) -> str:
+        return ", ".join(f"[[{s}]]" for s in items) if items else "(none)"
+
+    return (
+        f"## {event.timestamp_iso}\n\n"
+        f"**source:** `{event.source_path}`\n\n"
+        f"- created: {_format_list(event.pages_created)}\n"
+        f"- updated: {_format_list(event.pages_updated)}\n"
+        f"- failed: {_format_list(event.pages_failed)}\n\n"
+        f"---\n\n"
+    )
