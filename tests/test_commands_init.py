@@ -92,14 +92,17 @@ class TestInitBasics:
 
 
 class TestGitInit:
-    def test_init_non_git_dir_with_yes_runs_git_init(self, tmp_path, runner):
-        # No git repo; feed 'y' to the confirm prompt.
+    def test_init_non_git_dir_with_yes_runs_git_init(self, tmp_path, runner, monkeypatch):
+        # Force TTY so the confirm prompt is reached; feed 'y' to accept.
+        monkeypatch.setattr("giki.commands.init._stdin_is_tty", lambda: True)
         result = runner.invoke(init_app, ["--root", str(tmp_path)], input="y\n")
         assert result.exit_code == 0, result.output
         assert (tmp_path / ".git").exists()
         assert (tmp_path / ".giki" / "config.yaml").exists()
 
-    def test_init_non_git_dir_with_no_aborts(self, tmp_path, runner):
+    def test_init_non_git_dir_with_no_aborts(self, tmp_path, runner, monkeypatch):
+        # Force TTY so the confirm prompt is reached; feed 'n' to decline.
+        monkeypatch.setattr("giki.commands.init._stdin_is_tty", lambda: True)
         result = runner.invoke(init_app, ["--root", str(tmp_path)], input="n\n")
         assert result.exit_code == 1
         assert not (tmp_path / ".git").exists()
@@ -133,3 +136,45 @@ class TestNextSteps:
         assert result.exit_code == 0
         assert "Next steps:" in result.stdout
         assert "giki ingest" in result.stdout
+
+
+class TestNonTTY:
+    def test_init_non_tty_proceeds_without_confirm(self, tmp_path, runner, monkeypatch):
+        # Simulate non-TTY on a non-git directory. Init should proceed without
+        # prompting and without exiting with code 1.
+        monkeypatch.setattr("giki.commands.init._stdin_is_tty", lambda: False)
+        result = runner.invoke(init_app, ["--root", str(tmp_path)])
+        assert result.exit_code == 0, result.output
+        assert (tmp_path / ".git").exists()
+        assert (tmp_path / ".giki" / "config.yaml").exists()
+
+
+class TestPartialPreexistence:
+    def test_init_partial_preexistence(self, tmp_path, runner):
+        _init_git_repo(tmp_path)
+        # Pre-create some scaffolding files but not others.
+        (tmp_path / "index.md").write_text("preexisting index\n", encoding="utf-8")
+        (tmp_path / "README.md").write_text("preexisting readme\n", encoding="utf-8")
+
+        result = runner.invoke(init_app, ["--root", str(tmp_path)])
+        assert result.exit_code == 0, result.output
+
+        # config.yaml should be created; index.md and README.md should be kept.
+        assert "+ created" in result.stdout
+        assert str(tmp_path / ".giki" / "config.yaml") in result.stdout
+        assert "\u00b7 kept" in result.stdout
+        assert str(tmp_path / "index.md") in result.stdout
+        assert str(tmp_path / "README.md") in result.stdout
+
+
+class TestWithActionIdempotent:
+    def test_init_with_action_idempotent(self, tmp_path, runner):
+        _init_git_repo(tmp_path)
+        r1 = runner.invoke(init_app, ["--root", str(tmp_path), "--with-action"])
+        assert r1.exit_code == 0, r1.output
+
+        r2 = runner.invoke(init_app, ["--root", str(tmp_path), "--with-action"])
+        assert r2.exit_code == 0, r2.output
+        wf_path = tmp_path / ".github" / "workflows" / "giki-review.yml"
+        assert wf_path.exists()
+        assert f"\u00b7 kept {wf_path}" in r2.stdout

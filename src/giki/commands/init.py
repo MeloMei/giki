@@ -9,6 +9,7 @@ Idempotent: existing files are preserved and reported as `· kept <path>`.
 
 from __future__ import annotations
 
+import sys
 from importlib import resources
 from pathlib import Path
 
@@ -49,6 +50,11 @@ def _is_git_repo(root: Path) -> bool:
         return False
 
 
+def _stdin_is_tty() -> bool:
+    """Return True if stdin is a TTY. Wrapped for testability."""
+    return sys.stdin.isatty()
+
+
 def _copy_if_absent(src_name: str, dest: Path) -> bool:
     """Write template `src_name` to `dest` if `dest` does not already exist.
 
@@ -71,7 +77,7 @@ def init_command(
         help="Generate .github/workflows/giki-review.yml",
     ),
     root: Path = typer.Option(
-        Path.cwd(),
+        Path("."),
         "--root",
         help="Target directory (default: cwd)",
         show_default=False,
@@ -82,13 +88,15 @@ def init_command(
     root.mkdir(parents=True, exist_ok=True)
 
     if not _is_git_repo(root):
-        # Non-TTY defaults to yes; typer.confirm honors that via default=True.
-        proceed = typer.confirm(
-            f"{root} is not a git repo. Initialize one?",
-            default=True,
-        )
-        if not proceed:
-            typer.echo("Aborted: giki init requires a git repository.")
+        if not _stdin_is_tty():
+            should_init = True
+        else:
+            should_init = typer.confirm(
+                f"{root} is not a git repo. Initialize one?",
+                default=True,
+            )
+        if not should_init:
+            typer.echo("Aborted — giki requires a git repository.", err=True)
             raise typer.Exit(code=1)
         git.Repo.init(str(root))
         typer.echo(f"+ initialized git repo at {root}")
