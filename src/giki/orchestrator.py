@@ -18,6 +18,7 @@ from .config import Config
 from .git_utils import add_and_commit, checkout_branch, open_repo, ensure_clean_worktree
 from .llm import build_client
 from .llm.base import LLMAdapter, LLMError, Message
+from .llm.prompts import PromptTemplate
 from .sources.loader import LoadedSource, load_source
 from .sources.state import SourceState
 from .utils import extract_json, iso_now, to_slug
@@ -543,34 +544,15 @@ def _render_analyze_prompt(
     *, chunk: str, chunk_i: int, chunk_n: int,
     source_path: str, source_kind: str, index_summary: str,
 ) -> str:
-    return f"""You are giki's knowledge compiler.
-Analyze the content below and propose which wiki pages should be created or updated.
-
-Source: {source_path} ({source_kind})
-Chunk {chunk_i}/{chunk_n}
-
-Existing pages:
-{index_summary or "(none)"}
-
-Content:
----
-{chunk}
----
-
-Output JSON only:
-{{
-  "suggested_pages": [
-    {{
-      "filename": "kebab-case-slug",
-      "title": "Human readable",
-      "action": "create" or "update",
-      "hints": ["..."],
-      "source_anchors": ["..."],
-      "aliases_suggested": ["..."]
-    }}
-  ]
-}}
-"""
+    tmpl = PromptTemplate.from_package("analyze.md")
+    return tmpl.render(
+        source_kind=source_kind,
+        source_path=source_path,
+        chunk_index=chunk_i,
+        chunk_total=chunk_n,
+        source_excerpt=chunk,
+        index_summary=index_summary or "(none)",
+    )
 
 
 def _build_index_summary(store: WikiStore) -> str:
@@ -657,57 +639,44 @@ def _render_synthesize_create_prompt(
     *, slug: str, title: str, source_path: str,
     source_excerpt: str, hints: list[str], aliases: list[str],
 ) -> str:
+    tmpl = PromptTemplate.from_package("synthesize.md")
     hints_block = "\n".join(f"- {h}" for h in hints) or "- (none)"
     aliases_block = ", ".join(aliases) or "(none)"
-    return f"""Write the wiki page body for concept "{title}" (slug: {slug}).
-
-Source: {source_path}
-Aliases: {aliases_block}
-
-Hints for what to cover:
-{hints_block}
-
-Source excerpt:
----
-{source_excerpt}
----
-
-Output ONLY the Markdown body (no YAML frontmatter \u2014 that will be added).
-Start with a single `# {title}` heading.
-"""
+    mode_block = "Write the wiki page body for a new concept."
+    return tmpl.render(
+        mode_block=mode_block,
+        slug=slug,
+        title=title,
+        source_path=source_path,
+        source_excerpt=source_excerpt,
+        hints_block=hints_block,
+        aliases_block=aliases_block,
+    )
 
 
 def _render_synthesize_update_prompt(
     *, slug: str, title: str, existing_body: str, source_path: str,
     source_excerpt: str, hints: list[str], aliases: list[str],
 ) -> str:
+    tmpl = PromptTemplate.from_package("synthesize.md")
     hints_block = "\n".join(f"- {h}" for h in hints) or "- (none)"
     aliases_block = ", ".join(aliases) or "(none)"
-    return f"""Rewrite the existing wiki page "{title}" (slug: {slug}) incorporating new material.
-
-CRITICAL: Preserve any content NOT covered by the new source. Only rewrite
-paragraphs that the new source clearly supersedes or expands. Existing
-`[[wikilinks]]` should be kept unless clearly obsolete.
-
-Source: {source_path}
-Aliases: {aliases_block}
-
-Hints:
-{hints_block}
-
-Existing body:
----
-{existing_body}
----
-
-New source excerpt:
----
-{source_excerpt}
----
-
-Output ONLY the Markdown body (no YAML frontmatter).
-Start with a single `# {title}` heading.
-"""
+    mode_block = (
+        "Rewrite the existing wiki page incorporating new material.\n\n"
+        "CRITICAL: Preserve any content NOT covered by the new source. Only rewrite\n"
+        "paragraphs that the new source clearly supersedes or expands. Existing\n"
+        "[[wikilinks]] should be kept unless clearly obsolete.\n\n"
+        "Existing body:\n---\n" + existing_body + "\n---"
+    )
+    return tmpl.render(
+        mode_block=mode_block,
+        slug=slug,
+        title=title,
+        source_path=source_path,
+        source_excerpt=source_excerpt,
+        hints_block=hints_block,
+        aliases_block=aliases_block,
+    )
 
 
 def _wrap_frontmatter_create(
@@ -793,33 +762,13 @@ def _build_full_page_index(store: WikiStore) -> str:
 def _render_crosslink_prompt(
     *, slug: str, title: str, body: str, all_pages_index: str,
 ) -> str:
-    return f"""You are giki's cross-linker. Given the current page and the
-list of all wiki pages, propose:
-
-1. `neighbors`: up to 5 slugs of pages related to this one (for a `## Related` section).
-2. `inline_hints`: phrases in the body that should become `[[wikilink]]` references to other pages.
-
-Only suggest neighbors/targets that appear in the index below.
-Do NOT rewrite the body itself. Do NOT return prose. JSON only.
-
-Current page: {slug} \u2014 {title}
-
-All pages:
-{all_pages_index}
-
-Current body:
----
-{body}
----
-
-Output JSON:
-{{
-  "neighbors": ["slug1", "slug2"],
-  "inline_hints": [
-    {{"phrase": "exact text in body", "target": "slug"}}
-  ]
-}}
-"""
+    tmpl = PromptTemplate.from_package("crosslink.md")
+    return tmpl.render(
+        slug=slug,
+        title=title,
+        body=body,
+        all_pages_index=all_pages_index,
+    )
 
 
 def _replace_first_whole_word(text: str, phrase: str, target: str) -> str:
