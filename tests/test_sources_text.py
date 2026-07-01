@@ -86,10 +86,3 @@ class TestErrors:
     def test_directory_raises(self, tmp_path):
         with pytest.raises(SourceLoadError, match="not a regular file"):
             load_source(tmp_path)
-
-    def test_pdf_not_yet_implemented(self, tmp_path):
-        """Task 11 will implement PDF. Until then, stub raises NotImplementedError."""
-        p = tmp_path / "x.pdf"
-        p.write_bytes(b"%PDF-1.4\n")  # minimal PDF-like bytes
-        with pytest.raises(NotImplementedError):
-            load_source(p)

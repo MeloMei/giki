@@ -60,5 +60,36 @@ def _decode_text(raw: bytes) -> str:
 
 
 def _load_pdf(raw: bytes, path: Path, sep: str, reject_scanned: bool) -> str:
-    # PDF handling lands in Task 11.
-    raise NotImplementedError("PDF loading arrives in Task 11")
+    """Extract text from a PDF, one page at a time, with page separators.
+
+    Does NOT do OCR. For scanned PDFs (image-only pages), returns empty text
+    per page; if `reject_scanned=True`, raises SourceLoadError.
+    """
+    import io
+    from pypdf import PdfReader
+    from pypdf.errors import PdfReadError
+
+    try:
+        reader = PdfReader(io.BytesIO(raw))
+    except PdfReadError as e:
+        raise SourceLoadError(f"failed to parse PDF {path}: {e}") from e
+
+    parts: list[str] = []
+    non_empty_pages = 0
+    for i, page in enumerate(reader.pages, start=1):
+        try:
+            text = page.extract_text() or ""
+        except Exception:  # pypdf can throw on odd content streams
+            text = ""
+        text = text.strip()
+        if text:
+            non_empty_pages += 1
+        parts.append(sep.format(n=i) + ("\n" + text if text else ""))
+
+    if reject_scanned and non_empty_pages == 0:
+        raise SourceLoadError(
+            f"PDF {path} appears to be scanned (no extractable text). "
+            "giki does not do OCR; convert to text first or set pdf.reject_scanned=false."
+        )
+
+    return "\n\n".join(parts)
