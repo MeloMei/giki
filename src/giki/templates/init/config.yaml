@@ -1,0 +1,34 @@
+llm:
+  compile:
+    provider: claude
+    model: claude-sonnet-4-5-20250929
+    base_url: https://api.anthropic.com
+    api_key_env: ANTHROPIC_API_KEY
+    max_retries: 3
+    timeout_sec: 120
+  review:
+    provider: claude
+    model: claude-sonnet-4-5-20250929
+    base_url: https://api.anthropic.com
+    api_key_env: ANTHROPIC_API_KEY
+    max_retries: 3
+    timeout_sec: 120
+
+ingest:
+  chunk_size: 12000
+  chunk_overlap: 500
+  synthesize_context: 6000
+  interactive: auto                 # auto | always | never
+  pdf:
+    page_separator: "<!-- giki:page {n} -->"
+    reject_scanned: true
+
+review:
+  unrelated_edit_threshold: 0.30
+  severity_blocking: [blocker]
+  pr_comment_collapse: true         # 折叠 nit findings
+
+wiki:
+  enforce_slug_pattern: "^[a-z0-9-]+$"
+  max_slug_length: 80
+  related_min_neighbors: 1

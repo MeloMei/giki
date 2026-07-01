@@ -30,6 +30,7 @@ packages = ["src/giki"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "src/giki/templates" = "giki/templates"
+"src/giki/templates/init" = "giki/templates/init"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
