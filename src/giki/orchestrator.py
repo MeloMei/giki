@@ -1,10 +1,12 @@
 """Ingest orchestration: source -> LLM analyze -> LLM synthesize -> LLM crosslink -> git commit.
 
-Phases 0-2 implemented here. Phases 3-7 arrive in Tasks 21-22.
+Full end-to-end pipeline (Phases 0-7) plus a top-level ``ingest()`` entry point.
 """
 
 from __future__ import annotations
 
+import re
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
@@ -13,13 +15,14 @@ import git
 import yaml
 
 from .config import Config
-from .git_utils import checkout_branch, open_repo, ensure_clean_worktree
+from .git_utils import add_and_commit, checkout_branch, open_repo, ensure_clean_worktree
 from .llm import build_client
 from .llm.base import LLMAdapter, LLMError, Message
 from .sources.loader import LoadedSource, load_source
 from .sources.state import SourceState
 from .utils import extract_json, iso_now, to_slug
-from .wiki.linker import Linker
+from .wiki.index_log import IndexEntry, LogEvent, append_to_index, append_to_log
+from .wiki.linker import Linker, apply_related_block
 from .wiki.parser import parse_page
 from .wiki.store import WikiStore
 
@@ -32,6 +35,17 @@ class SuggestedPage:
     hints: list[str] = field(default_factory=list)
     source_anchors: list[str] = field(default_factory=list)
     aliases_suggested: list[str] = field(default_factory=list)
+
+
+@dataclass
+class IngestResult:
+    source_path: Path
+    branch: str | None
+    created: list[str]
+    updated: list[str]
+    failed: list[str]
+    commit_sha: str | None
+    skipped: bool = False
 
 
 class Ingester:
@@ -280,6 +294,250 @@ class Ingester:
             (succeeded if ok else failed).append(slug)
         return succeeded, failed
 
+    # -------- Phase 5: Crosslink --------
+
+    def crosslink(
+        self,
+        succeeded_slugs: list[str],
+        *,
+        llm_client: LLMAdapter | None = None,
+    ) -> tuple[list[str], list[str]]:
+        """Ask LLM to propose neighbors + inline hints; apply best-effort per page."""
+        if not succeeded_slugs:
+            return [], []
+        client = llm_client or build_client(self.config.llm.compile)
+        store = WikiStore(
+            self.config.root,
+            slug_pattern=self.config.wiki.enforce_slug_pattern,
+            max_slug_length=self.config.wiki.max_slug_length,
+        )
+        linker = Linker(store)
+
+        all_pages_index = _build_full_page_index(store)
+
+        succeeded: list[str] = []
+        failed: list[str] = []
+        for slug in succeeded_slugs:
+            if not store.exists(slug):
+                failed.append(slug)
+                continue
+            existing_page = parse_page(store.read(slug))
+            prompt = _render_crosslink_prompt(
+                slug=slug,
+                title=existing_page.title,
+                body=existing_page.body,
+                all_pages_index=all_pages_index,
+            )
+            try:
+                response = client.chat([Message(role="user", content=prompt)])
+                data = extract_json(response.text)
+            except (LLMError, ValueError):
+                failed.append(slug)
+                continue
+
+            neighbors_raw = data.get("neighbors", []) if isinstance(data, dict) else []
+            inline_hints_raw = data.get("inline_hints", []) if isinstance(data, dict) else []
+
+            # Filter neighbors: only include those that resolve, exclude self, dedupe.
+            resolved_neighbors: list[str] = []
+            for n in neighbors_raw:
+                if not isinstance(n, str):
+                    continue
+                r = linker.resolve(n)
+                if r and r != slug and r not in resolved_neighbors:
+                    resolved_neighbors.append(r)
+
+            # Apply inline hints to body (only for resolvable targets and whole-word matches).
+            new_body = existing_page.body
+            for hint in inline_hints_raw:
+                if not isinstance(hint, dict):
+                    continue
+                phrase = str(hint.get("phrase") or "")
+                target = str(hint.get("target") or "")
+                if not phrase or not target:
+                    continue
+                if linker.resolve(target) is None:
+                    continue
+                new_body = _replace_first_whole_word(new_body, phrase, target)
+
+            # Apply Related block.
+            new_body = apply_related_block(
+                new_body,
+                resolved_neighbors,
+                min_neighbors=self.config.wiki.related_min_neighbors,
+            )
+
+            # Rewrite the page preserving frontmatter.
+            store.write(slug, _replace_body(store.read(slug), new_body))
+            succeeded.append(slug)
+
+        return succeeded, failed
+
+    # -------- Phase 6: Index & Log & State --------
+
+    def update_index_and_log(
+        self,
+        source: LoadedSource,
+        *,
+        created: list[str],
+        updated: list[str],
+        failed: list[str],
+        timestamp_iso: str,
+    ) -> None:
+        store = WikiStore(
+            self.config.root,
+            slug_pattern=self.config.wiki.enforce_slug_pattern,
+            max_slug_length=self.config.wiki.max_slug_length,
+        )
+        entries: list[IndexEntry] = []
+        for slug in list(created) + list(updated):
+            if not store.exists(slug):
+                continue
+            page = parse_page(store.read(slug))
+            entries.append(IndexEntry(slug=slug, title=page.title, tags=list(page.tags)))
+        if entries:
+            append_to_index(self.config.root / "index.md", entries)
+
+        append_to_log(
+            self.config.root / "log.md",
+            LogEvent(
+                timestamp_iso=timestamp_iso,
+                source_path=str(source.path),
+                pages_created=list(created),
+                pages_updated=list(updated),
+                pages_failed=list(failed),
+            ),
+        )
+
+        # Update source state.
+        self.state.mark(source.path, source.sha256, pages=list(created) + list(updated))
+        self.state.save()
+
+    # -------- Phase 7: Commit --------
+
+    def commit(
+        self,
+        repo: git.Repo,
+        source: LoadedSource,
+        *,
+        created: list[str],
+        updated: list[str],
+        failed: list[str],
+    ) -> git.Commit | None:
+        succeeded = list(created) + list(updated)
+        total = len(succeeded) + len(failed)
+        n = len(succeeded)
+        msg = f"ingest: {source.path.name} \u2014 {n} of {total} pages"
+        if failed:
+            msg += f" ({len(failed)} failed)"
+
+        paths: list[str] = []
+        for rel in ("wiki", "index.md", "log.md", ".giki-state"):
+            candidate = self.config.root / rel
+            if candidate.exists():
+                paths.append(rel)
+
+        if not paths:
+            return None
+        try:
+            return add_and_commit(repo, paths, msg)
+        except Exception:
+            return None
+
+    # -------- Top-level ingest --------
+
+    def ingest(
+        self,
+        source_path: Path,
+        *,
+        branch: str | None,
+        yes: bool,
+        dry_run: bool,
+        retry_failed: bool = False,
+        llm_client: LLMAdapter | None = None,
+    ) -> IngestResult:
+        """End-to-end ingest of one source file."""
+        source_path = Path(source_path)
+
+        # Exempt the source file from the clean-worktree check when it lives
+        # inside the repo (common for `sources/foo.md`). We do this via the
+        # repo-local `.git/info/exclude` so we do not touch the shared `.gitignore`.
+        _exempt_source_from_git(self.config.root, source_path)
+
+        # Phase 0
+        repo = self.bootstrap(branch=branch)
+
+        # Phase 1
+        loaded, needs = self.load_source(source_path)
+        if not needs and not retry_failed:
+            return IngestResult(
+                source_path=source_path,
+                branch=branch,
+                created=[], updated=[], failed=[],
+                commit_sha=None,
+                skipped=True,
+            )
+
+        # Phase 2
+        candidates = self.analyze(loaded, llm_client=llm_client)
+
+        # Phase 3
+        selected = self.confirm_pages(
+            candidates,
+            yes=yes,
+            dry_run=dry_run,
+            tty=sys.stdin.isatty(),
+        )
+        if dry_run or not selected:
+            return IngestResult(
+                source_path=source_path,
+                branch=branch,
+                created=[], updated=[], failed=[],
+                commit_sha=None,
+                skipped=False,
+            )
+
+        # Phase 4
+        succeeded, failed_synth = self.synthesize_all(loaded, selected, llm_client=llm_client)
+
+        # Phase 5 (best-effort; failures don't remove the page)
+        self.crosslink(succeeded, llm_client=llm_client)
+
+        # Partition into created vs updated based on selected action.
+        created_slugs: list[str] = []
+        updated_slugs: list[str] = []
+        for sp in selected:
+            if sp.filename in succeeded:
+                if sp.action == "update":
+                    updated_slugs.append(sp.filename)
+                else:
+                    created_slugs.append(sp.filename)
+
+        # Phase 6
+        self.update_index_and_log(
+            loaded,
+            created=created_slugs,
+            updated=updated_slugs,
+            failed=failed_synth,
+            timestamp_iso=iso_now(),
+        )
+
+        # Phase 7
+        commit = self.commit(
+            repo, loaded,
+            created=created_slugs, updated=updated_slugs, failed=failed_synth,
+        )
+
+        return IngestResult(
+            source_path=source_path,
+            branch=branch,
+            created=created_slugs,
+            updated=updated_slugs,
+            failed=failed_synth,
+            commit_sha=commit.hexsha if commit is not None else None,
+            skipped=False,
+        )
+
 
 def _render_analyze_prompt(
     *, chunk: str, chunk_i: int, chunk_n: int,
@@ -494,3 +752,95 @@ def _format_page(frontmatter: dict, body: str) -> str:
     fm_yaml = yaml.safe_dump(frontmatter, sort_keys=False, allow_unicode=True).rstrip()
     body = body.strip() + "\n"
     return f"---\n{fm_yaml}\n---\n\n{body}"
+
+
+def _exempt_source_from_git(repo_root: Path, source_path: Path) -> None:
+    """Add ``source_path`` (relative to ``repo_root``) to ``.git/info/exclude``.
+
+    No-op when the source lives outside the repo or when it is already listed.
+    Idempotent and side-effect-free otherwise.
+    """
+    try:
+        rel = Path(source_path).resolve().relative_to(Path(repo_root).resolve())
+    except (ValueError, OSError):
+        return
+    rel_posix = rel.as_posix()
+    exclude_path = Path(repo_root) / ".git" / "info" / "exclude"
+    try:
+        exclude_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return
+    existing = exclude_path.read_text(encoding="utf-8") if exclude_path.exists() else ""
+    lines = [ln.strip() for ln in existing.splitlines()]
+    if rel_posix in lines:
+        return
+    new_text = existing
+    if new_text and not new_text.endswith("\n"):
+        new_text += "\n"
+    new_text += rel_posix + "\n"
+    exclude_path.write_text(new_text, encoding="utf-8")
+
+
+def _build_full_page_index(store: WikiStore) -> str:
+    """One line per page: 'slug - Title - aliases: A, B'."""
+    lines: list[str] = []
+    for slug, page in store.all_pages():
+        aliases = ", ".join(page.aliases) if page.aliases else "(none)"
+        lines.append(f"- {slug} \u2014 {page.title} \u2014 aliases: {aliases}")
+    return "\n".join(lines) or "(no pages yet)"
+
+
+def _render_crosslink_prompt(
+    *, slug: str, title: str, body: str, all_pages_index: str,
+) -> str:
+    return f"""You are giki's cross-linker. Given the current page and the
+list of all wiki pages, propose:
+
+1. `neighbors`: up to 5 slugs of pages related to this one (for a `## Related` section).
+2. `inline_hints`: phrases in the body that should become `[[wikilink]]` references to other pages.
+
+Only suggest neighbors/targets that appear in the index below.
+Do NOT rewrite the body itself. Do NOT return prose. JSON only.
+
+Current page: {slug} \u2014 {title}
+
+All pages:
+{all_pages_index}
+
+Current body:
+---
+{body}
+---
+
+Output JSON:
+{{
+  "neighbors": ["slug1", "slug2"],
+  "inline_hints": [
+    {{"phrase": "exact text in body", "target": "slug"}}
+  ]
+}}
+"""
+
+
+def _replace_first_whole_word(text: str, phrase: str, target: str) -> str:
+    """Replace the first whole-word occurrence of `phrase` with `[[target|phrase]]`.
+
+    If the phrase is empty or not found, return `text` unchanged.
+    """
+    if not phrase.strip():
+        return text
+    pattern = r"(?<![\w-])" + re.escape(phrase) + r"(?![\w-])"
+    replacement = f"[[{target}|{phrase}]]"
+    return re.sub(pattern, replacement, text, count=1)
+
+
+_FRONTMATTER_SPLIT_RE = re.compile(r"\A(---\n.*?\n---\n)(.*)\Z", re.DOTALL)
+
+
+def _replace_body(page_text: str, new_body: str) -> str:
+    """Replace body (post-frontmatter) of a page file with `new_body`."""
+    m = _FRONTMATTER_SPLIT_RE.match(page_text)
+    if not m:
+        return new_body  # No frontmatter: just return the new body.
+    fm_block = m.group(1)
+    return fm_block + "\n" + new_body.strip() + "\n"
