@@ -120,3 +120,77 @@ class TestReindex:
         _write(store, "a", title="A", aliases=["Alpha"])
         linker.reindex()
         assert linker.resolve("Alpha") == "a"
+
+
+from giki.wiki.linker import apply_related_block
+
+
+class TestRelatedBlock:
+    def test_below_min_neighbors_unchanged(self):
+        body = "# Title\n\nSome content.\n"
+        assert apply_related_block(body, [], min_neighbors=1) == body
+        assert apply_related_block(body, [], min_neighbors=2) == body
+        assert apply_related_block(body, ["one"], min_neighbors=2) == body
+
+    def test_first_time_append(self):
+        body = "# Title\n\nSome content.\n"
+        result = apply_related_block(body, ["a", "b"], min_neighbors=1)
+        assert "# Title" in result
+        assert "Some content." in result
+        assert "## Related" in result
+        assert "- [[a]]" in result
+        assert "- [[b]]" in result
+        # The separator '---' should appear once before Related
+        related_pos = result.index("## Related")
+        content_before = result[:related_pos]
+        assert "---" in content_before
+
+    def test_existing_block_replaced(self):
+        body = """# Title
+
+Content.
+
+---
+
+## Related
+- [[old-neighbor]]
+"""
+        result = apply_related_block(body, ["new-a", "new-b"], min_neighbors=1)
+        assert "old-neighbor" not in result
+        assert "- [[new-a]]" in result
+        assert "- [[new-b]]" in result
+        # Should still have exactly one ## Related
+        assert result.count("## Related") == 1
+
+    def test_order_preserved(self):
+        body = "# T\n\nContent.\n"
+        result = apply_related_block(body, ["c", "a", "b"], min_neighbors=1)
+        ia = result.index("[[a]]")
+        ib = result.index("[[b]]")
+        ic = result.index("[[c]]")
+        # Neighbors written in the order given
+        assert ic < ia < ib
+
+    def test_empty_neighbors_with_existing_block_removes_it(self):
+        """If neighbors becomes empty and a block exists, the block should be removed."""
+        body = """# T
+
+Content.
+
+---
+
+## Related
+- [[old]]
+"""
+        result = apply_related_block(body, [], min_neighbors=1)
+        assert "## Related" not in result
+        assert "old" not in result
+        # The main content should still be present
+        assert "Content." in result
+
+    def test_no_double_appended_when_re_run(self):
+        body = "# T\n\nContent.\n"
+        once = apply_related_block(body, ["a"], min_neighbors=1)
+        twice = apply_related_block(once, ["a"], min_neighbors=1)
+        # Should not have two "## Related" sections
+        assert twice.count("## Related") == 1
