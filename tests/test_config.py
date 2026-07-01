@@ -112,6 +112,13 @@ review:
         assert cfg.ingest.interactive == "never"
         assert cfg.review.severity_blocking == ["blocker", "warn"]
 
+    def test_severity_blocking_explicit_empty_list_preserved(self, tmp_path):
+        """User explicitly setting severity_blocking: [] must not be silently replaced."""
+        body = VALID_YAML + "\nreview:\n  severity_blocking: []\n"
+        _write_config(tmp_path, body)
+        cfg = load_config(tmp_path)
+        assert cfg.review.severity_blocking == []
+
     def test_malformed_yaml_raises(self, tmp_path):
         _write_config(tmp_path, "llm: {not valid yaml: [[[")
         with pytest.raises(ConfigError):

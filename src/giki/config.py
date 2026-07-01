@@ -170,7 +170,7 @@ def _parse_ingest(raw: dict) -> IngestConfig:
 def _parse_review(raw: dict) -> ReviewConfig:
     return ReviewConfig(
         unrelated_edit_threshold=float(raw.get("unrelated_edit_threshold", 0.30)),
-        severity_blocking=list(raw.get("severity_blocking") or ["blocker"]),
+        severity_blocking=list(raw.get("severity_blocking", ["blocker"])),
         pr_comment_collapse=bool(raw.get("pr_comment_collapse", True)),
     )
 
