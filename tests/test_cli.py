@@ -30,9 +30,9 @@ class TestTopLevelHelp:
         result = runner.invoke(app, ["--help"])
         assert result.exit_code == 0, result.output
         out = result.stdout
-        for name in ("init", "ingest", "config"):
+        for name in ("init", "ingest", "config", "review"):
             assert name in out, f"expected {name!r} in help output:\n{out}"
-        for name in ("review", "lint", "merge", "collab", "serve", "chat", "fusion"):
+        for name in ("lint", "merge", "collab", "serve", "chat", "fusion"):
             # word-boundary match so unrelated words like 'preserve' don't trigger
             assert not re.search(rf"\b{name}\b", out), (
                 f"did not expect standalone {name!r} in v0.1 help:\n{out}"
@@ -128,7 +128,7 @@ class TestIngestDelegation:
 
 @pytest.mark.parametrize(
     "mod_name",
-    ["review", "lint", "merge", "collab", "serve", "chat", "fusion"],
+    ["lint", "merge", "collab", "serve", "chat", "fusion"],
 )
 def test_stub_modules_raise_notimplementederror(mod_name: str) -> None:
     mod = importlib.import_module(f"giki.commands.{mod_name}")
