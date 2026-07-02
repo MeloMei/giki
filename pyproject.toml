@@ -17,6 +17,7 @@ dependencies = [
     "httpx>=0.27",
     "PyYAML>=6.0",
     "rich>=13.0",
+    "mcp>=1.0",
 ]
 
 [project.optional-dependencies]
