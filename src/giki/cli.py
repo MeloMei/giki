@@ -1,9 +1,9 @@
 """giki CLI entry point.
 
 Registers commands: ``init``, ``ingest``, ``config``, ``review``, ``mcp-serve``,
-``branch``, ``pr``.
-Future command modules (``lint``, ``merge``, ``collab``, ``serve``,
-``chat``, ``fusion``) exist as scaffolding but are not wired up.
+``branch``, ``pr``, ``serve``, ``chat``.
+Future command modules (``lint``, ``merge``, ``collab``, ``fusion``) exist as
+scaffolding but are not wired up.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ from __future__ import annotations
 import typer
 
 from .commands.branch import branch_app
+from .commands.chat import chat_command
 from .commands.config_cmd import config_app
 from .commands.ingest import ingest_command
 from .commands.init import init_app
@@ -33,6 +34,7 @@ app.command("review")(review_command)
 app.add_typer(branch_app, name="branch")
 app.add_typer(pr_app, name="pr")
 app.command("serve")(serve_command)
+app.command("chat")(chat_command)
 
 
 @app.command("mcp-serve")
