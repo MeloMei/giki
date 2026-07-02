@@ -93,7 +93,7 @@ flowchart TD
 ### 安装
 
 ```bash
-pip install giki
+pip install giki-gitwiki
 ```
 
 ### 初始化知识库

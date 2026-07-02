@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "giki"
+name = "giki-gitwiki"
 version = "0.1.0"
 description = "Software-engineering approach to LLM Wikis."
 readme = "README.md"

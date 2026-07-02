@@ -3,6 +3,7 @@
 > Software-engineering approach to LLM Wikis.
 
 [![CI](https://github.com/MeloMei/giki/actions/workflows/ci.yml/badge.svg)](https://github.com/MeloMei/giki/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/giki-gitwiki)](https://pypi.org/project/giki-gitwiki/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
@@ -87,7 +88,7 @@ graph TD
 ### Install
 
 ```bash
-pip install giki
+pip install giki-gitwiki
 ```
 
 Or from source:
@@ -293,7 +294,7 @@ jobs:
         with: { fetch-depth: 0 }
       - uses: actions/setup-python@v5
         with: { python-version: '3.11' }
-      - run: pip install giki
+      - run: pip install giki-gitwiki
       - run: giki review --pr ${{ github.event.pull_request.number }} --post
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
