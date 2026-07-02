@@ -10,6 +10,7 @@ from pathlib import Path
 import typer
 
 from ..config import ConfigError, load_config
+from ..console import console, error as _error, info, print_panel
 from ..diff import (
     classify_changes,
     get_diff_changes,
@@ -55,14 +56,14 @@ def review_command(
 
     # --post requires --pr
     if post and pr is None:
-        typer.echo("error: --post requires --pr <id>", err=True)
+        _error("--post requires --pr <id>")
         raise typer.Exit(code=2)
 
     # Load config
     try:
         cfg = load_config(root)
     except ConfigError as e:
-        typer.echo(f"error: {e}", err=True)
+        _error(str(e))
         raise typer.Exit(code=2)
 
     # Parse wiki-rules.md (optional — empty rules if missing)
@@ -79,7 +80,7 @@ def review_command(
         else:
             changes = get_diff_changes(root, base=base)
     except RuntimeError as e:
-        typer.echo(f"error: {e}", err=True)
+        _error(str(e))
         raise typer.Exit(code=2)
 
     classified = classify_changes(changes)
@@ -192,20 +193,50 @@ def review_command(
 
     # Output
     if json_output:
-        typer.echo(
+        console.print_json(
             json_module.dumps(format_json(result), indent=2, ensure_ascii=False)
         )
     else:
+        # Show verdict header
+        verdict_style = {
+            "approve": "green",
+            "comment": "yellow",
+            "request-changes": "red",
+        }.get(result.verdict.value, "white")
+        verdict_icon = {
+            "approve": "[green]✓ APPROVE[/green]",
+            "comment": "[yellow]○ COMMENT[/yellow]",
+            "request-changes": "[red]✗ REQUEST CHANGES[/red]",
+        }.get(result.verdict.value, result.verdict.value)
+
+        stats = f"{result.pages_reviewed} page(s) reviewed"
+        if result.pages_skipped:
+            stats += f", {result.pages_skipped} skipped (hand-written)"
+
+        print_panel(
+            f"{verdict_icon}\n\n{stats}",
+            title="Review Verdict",
+            style=verdict_style,
+        )
+
+        # Mechanical findings summary
+        mech_count = len([f for f in result.findings if f.finding_type == "mechanical"])
+        sem_count = len([f for f in result.findings if f.finding_type == "semantic"])
+        if result.findings:
+            console.print(f"\n[bold]{len(result.findings)} finding(s)[/bold] "
+                          f"([dim]{mech_count} mechanical, {sem_count} semantic[/dim])\n")
+
+        # Detailed output
         md = format_markdown(result, collapse_nits=cfg.review.pr_comment_collapse)
-        typer.echo(md)
+        console.print(md)
 
     # Post to PR
     if post and pr is not None:
         md = format_markdown(result, collapse_nits=cfg.review.pr_comment_collapse)
         try:
             post_pr_comment(pr, md)
-            typer.echo(f"Posted review to PR #{pr}.")
+            info(f"Posted review to PR #{pr}")
         except RuntimeError as e:
-            typer.echo(f"error: {e}", err=True)
+            _error(str(e))
 
     raise typer.Exit(code=verdict.exit_code)

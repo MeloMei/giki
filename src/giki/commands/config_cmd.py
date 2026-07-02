@@ -15,6 +15,7 @@ import typer
 import yaml
 
 from ..config import ConfigError, load_config
+from ..console import console, success, error, key_value_table, print_panel
 
 config_app = typer.Typer(
     help="Manage .giki/config.yaml. Note: `set` does not preserve YAML comments.",
@@ -34,7 +35,7 @@ def show(
     try:
         cfg = load_config(root)
     except ConfigError as e:
-        typer.echo(f"error: {e}", err=True)
+        error(str(e))
         raise typer.Exit(code=1)
 
     # Serialize the dataclass hierarchy to a dict for display
@@ -48,8 +49,7 @@ def show(
         return obj
 
     display = _to_display(cfg)
-    # JSON is easier to read than yaml.dump for showing computed defaults
-    typer.echo(json.dumps(display, indent=2, default=str))
+    console.print_json(json.dumps(display, indent=2, default=str))
 
 
 @config_app.command("set")
@@ -64,13 +64,13 @@ def set_command(
     """Update a config value. Overwrites .giki/config.yaml (comments not preserved)."""
     cfg_path = Path(root) / ".giki" / "config.yaml"
     if not cfg_path.exists():
-        typer.echo(f"error: {cfg_path} not found", err=True)
+        error(f"{cfg_path} not found")
         raise typer.Exit(code=1)
 
     try:
         raw = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
     except yaml.YAMLError as e:
-        typer.echo(f"error: failed to parse {cfg_path}: {e}", err=True)
+        error(f"failed to parse {cfg_path}: {e}")
         raise typer.Exit(code=1)
 
     parts = key.split(".")
@@ -88,43 +88,34 @@ def set_command(
         yaml.safe_dump(raw, sort_keys=False, allow_unicode=True, default_flow_style=False),
         encoding="utf-8",
     )
-    typer.echo(f"Set {key} = {coerced!r}")
+    success(f"Set [bold]{key}[/bold] = {coerced!r}")
 
 
 @config_app.command("tips")
 def tips() -> None:
     """Show tips about common config keys."""
-    typer.echo(
-        """giki config tips
-================
-
-Common keys (all are optional if you're happy with defaults):
-
-  llm.compile.provider     claude | openai
-  llm.compile.model        model name
-  llm.compile.base_url     API base URL
-  llm.compile.api_key_env  env var name that holds the API key
-
-  llm.review.*             same fields as llm.compile
-
-  ingest.chunk_size        chars per Analyze chunk (default 12000)
-  ingest.chunk_overlap     overlap between chunks (default 500)
-  ingest.interactive       auto | always | never
-
-  review.severity_blocking list of severities that fail the PR
-  review.unrelated_edit_threshold  0.0-1.0
-
-  wiki.max_slug_length     default 80
-  wiki.related_min_neighbors  default 1
-
-Full reference:
-  docs/superpowers/specs/2026-06-30-giki-v0.1-design.md  §10.2
-
-Examples:
-  giki config show
-  giki config set llm.compile.model claude-4-opus
-  giki config set ingest.chunk_size 8000
-"""
+    print_panel(
+        "Common keys (all are optional if you're happy with defaults):\n\n"
+        "  [bold]llm.compile.provider[/bold]     claude | openai\n"
+        "  [bold]llm.compile.model[/bold]        model name\n"
+        "  [bold]llm.compile.base_url[/bold]     API base URL\n"
+        "  [bold]llm.compile.api_key_env[/bold]  env var name that holds the API key\n\n"
+        "  [bold]llm.review.*[/bold]             same fields as llm.compile\n\n"
+        "  [bold]ingest.chunk_size[/bold]        chars per Analyze chunk (default 12000)\n"
+        "  [bold]ingest.chunk_overlap[/bold]     overlap between chunks (default 500)\n"
+        "  [bold]ingest.interactive[/bold]       auto | always | never\n\n"
+        "  [bold]review.severity_blocking[/bold] list of severities that fail the PR\n"
+        "  [bold]review.unrelated_edit_threshold[/bold]  0.0-1.0\n\n"
+        "  [bold]wiki.max_slug_length[/bold]     default 80\n"
+        "  [bold]wiki.related_min_neighbors[/bold]  default 1\n\n"
+        "Full reference:\n"
+        "  docs/superpowers/specs/2026-06-30-giki-v0.1-design.md  §10.2\n\n"
+        "Examples:\n"
+        "  [dim]giki config show[/dim]\n"
+        "  [dim]giki config set llm.compile.model claude-4-opus[/dim]\n"
+        "  [dim]giki config set ingest.chunk_size 8000[/dim]",
+        title="giki config tips",
+        style="blue",
     )
 
 

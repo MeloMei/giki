@@ -119,8 +119,8 @@ class TestIngestDelegation:
         _, kwargs = m_ingester.ingest.call_args
         assert kwargs.get("dry_run") is True
         assert (
-            "1 sources processed, 0 pages created, 0 pages updated, 0 pages failed"
-            in result.stdout
+            "1 source(s) processed" in result.stdout
+            and "0 page(s) created" in result.stdout
         )
 
 

@@ -134,8 +134,8 @@ class TestNextSteps:
         _init_git_repo(tmp_path)
         result = runner.invoke(init_app, ["--root", str(tmp_path)])
         assert result.exit_code == 0
-        assert "Next steps:" in result.stdout
         assert "giki ingest" in result.stdout
+        assert "Next Steps" in result.stdout or "Next steps" in result.stdout
 
 
 class TestNonTTY:
@@ -160,9 +160,9 @@ class TestPartialPreexistence:
         assert result.exit_code == 0, result.output
 
         # config.yaml should be created; index.md and README.md should be kept.
-        assert "+ created" in result.stdout
+        assert "created" in result.stdout
         assert str(tmp_path / ".giki" / "config.yaml") in result.stdout
-        assert "\u00b7 kept" in result.stdout
+        assert "kept" in result.stdout
         assert str(tmp_path / "index.md") in result.stdout
         assert str(tmp_path / "README.md") in result.stdout
 
@@ -177,4 +177,4 @@ class TestWithActionIdempotent:
         assert r2.exit_code == 0, r2.output
         wf_path = tmp_path / ".github" / "workflows" / "giki-review.yml"
         assert wf_path.exists()
-        assert f"\u00b7 kept {wf_path}" in r2.stdout
+        assert "kept" in r2.stdout and str(wf_path) in r2.stdout

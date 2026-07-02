@@ -13,6 +13,7 @@ from .commands.config_cmd import config_app
 from .commands.ingest import ingest_command
 from .commands.init import init_app
 from .commands.review import review_command
+from .console import show_banner
 
 
 app = typer.Typer(
@@ -35,12 +36,14 @@ def _version_callback(value: bool) -> None:
             v = version("giki")
         except Exception:
             from . import __version__ as v
-        typer.echo(f"giki {v}")
+        from .console import console
+        console.print(f"[bold]giki[/bold] [dim]{v}[/dim]")
         raise typer.Exit()
 
 
-@app.callback()
+@app.callback(invoke_without_command=True)
 def _main(
+    ctx: typer.Context,
     version: bool = typer.Option(
         False,
         "--version",
@@ -50,7 +53,10 @@ def _main(
     ),
 ) -> None:
     """giki — LLM Wiki with software-engineering discipline."""
-    # No-op; kept so Typer attaches the --version eager option.
+    if ctx.invoked_subcommand is None:
+        show_banner()
+        from .console import console
+        console.print("\n[dim]Run [bold]giki --help[/bold] for available commands.[/dim]")
 
 
 if __name__ == "__main__":

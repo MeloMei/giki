@@ -1,10 +1,10 @@
 """`giki init` — scaffold a new knowledge base directory.
 
-Creates the standard giki layout (`.giki/`, `sources/`, `wiki/`, `.giki-state/`)
+Creates the standard giki layout (``.giki/``, ``sources/``, ``wiki/``, ``.giki-state/``)
 and copies template files (config, README, index/log/rules, .gitignore) from the
-packaged `giki.templates.init` resources.
+packaged ``giki.templates.init`` resources.
 
-Idempotent: existing files are preserved and reported as `· kept <path>`.
+Idempotent: existing files are preserved and reported as ``· kept <path>``.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from pathlib import Path
 import typer
 import git
 
+from ..console import console, success, dim, heading, print_panel, BANNER
 
 init_app = typer.Typer(
     help="Initialize a giki knowledge base in the target directory.",
@@ -61,11 +62,11 @@ def _copy_if_absent(src_name: str, dest: Path) -> bool:
     Returns True if the file was created, False if it was kept.
     """
     if dest.exists():
-        typer.echo(f"\u00b7 kept {dest}")
+        dim(f"  · kept {dest}")
         return False
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(_read_template(src_name))
-    typer.echo(f"+ created {dest}")
+    success(f"created {dest}")
     return True
 
 
@@ -87,6 +88,9 @@ def init_command(
     root = Path(root).resolve()
     root.mkdir(parents=True, exist_ok=True)
 
+    # Show banner
+    console.print(BANNER)
+
     if not _is_git_repo(root):
         if not _stdin_is_tty():
             should_init = True
@@ -96,19 +100,21 @@ def init_command(
                 default=True,
             )
         if not should_init:
-            typer.echo("Aborted — giki requires a git repository.", err=True)
+            console.print("[red]Aborted — giki requires a git repository.[/red]", stderr=True)
             raise typer.Exit(code=1)
         git.Repo.init(str(root))
-        typer.echo(f"+ initialized git repo at {root}")
+        success(f"initialized git repo at {root}")
+
+    heading("Scaffolding knowledge base")
 
     # Create directories.
     for d in _DIRS:
         p = root / d
         if not p.exists():
             p.mkdir(parents=True, exist_ok=True)
-            typer.echo(f"+ created {p}/")
+            success(f"created {p}/")
         else:
-            typer.echo(f"\u00b7 kept {p}/")
+            dim(f"  · kept {p}/")
 
     # Copy scaffolding files.
     for template_name, rel_dest in _FILE_MAP:
@@ -120,8 +126,11 @@ def init_command(
             "action.yml", root / ".github" / "workflows" / "giki-review.yml"
         )
 
-    typer.echo("")
-    typer.echo("Next steps:")
-    typer.echo("  1. Edit .giki/config.yaml (LLM provider, model)")
-    typer.echo("  2. Drop a file into sources/")
-    typer.echo("  3. Run: giki ingest sources/<file> --branch wiki/<topic>")
+    console.print()
+    print_panel(
+        "1. Edit [bold].giki/config.yaml[/bold] (LLM provider, model)\n"
+        "2. Drop a file into [bold]sources/[/bold]\n"
+        "3. Run: [bold]giki ingest sources/<file> --branch wiki/<topic>[/bold]",
+        title="Next Steps",
+        style="green",
+    )

@@ -13,6 +13,7 @@ import typer
 
 from ..config import ConfigError, load_config
 from ..orchestrator import Ingester
+from ..console import console, success, error, info, heading, print_panel
 
 
 def ingest_command(
@@ -54,7 +55,7 @@ def ingest_command(
     try:
         config = load_config(root.resolve())
     except ConfigError as e:
-        typer.echo(f"error: {e}", err=True)
+        error(str(e))
         raise typer.Exit(code=1)
 
     ingester = Ingester(config)
@@ -67,6 +68,7 @@ def ingest_command(
 
     for path in paths:
         n_sources += 1
+        info(f"ingesting [bold]{path.name}[/bold] ...")
         try:
             result = ingester.ingest(
                 path,
@@ -77,19 +79,32 @@ def ingest_command(
             )
         except Exception as exc:  # per-path failure — keep going
             any_exception = True
-            typer.echo(f"\u00d7 {path}: {exc}", err=True)
+            error(f"{path}: {exc}")
             continue
 
         total_created += len(result.created)
         total_updated += len(result.updated)
         total_failed += len(result.failed)
 
-    typer.echo(
-        f"{n_sources} sources processed, "
-        f"{total_created} pages created, "
-        f"{total_updated} pages updated, "
-        f"{total_failed} pages failed"
-    )
+        if result.created:
+            for slug in result.created:
+                success(f"  created [bold]{slug}[/bold]")
+        if result.updated:
+            for slug in result.updated:
+                info(f"  updated [bold]{slug}[/bold]")
+        if result.failed:
+            for item in result.failed:
+                error(f"  failed [bold]{item.slug}[/bold]: {item.error}")
+
+    # Summary
+    summary_lines = [
+        f"{n_sources} source(s) processed",
+        f"{total_created} page(s) created",
+        f"{total_updated} page(s) updated",
+        f"{total_failed} page(s) failed",
+    ]
+    console.print()
+    print_panel("\n".join(summary_lines), title="Ingest Summary")
 
     if any_exception or total_failed > 0:
         raise typer.Exit(code=1)
