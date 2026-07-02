@@ -30,7 +30,7 @@
 
 ## 🤔 Why giki?
 
-Andrej Karpathy's **LLM Wiki** pattern is changing knowledge management — instead of retrieving and stitch together answers at query time (the "interpreter" approach), LLMs *compile* raw documents into structured, interlinked wiki pages at ingest time (the "compiler" approach).
+Andrej Karpathy's **LLM Wiki** pattern is changing knowledge management — instead of retrieving and stitch together answers at query time (traditional rag) (the "interpreter" approach), LLMs *compile* raw documents into structured, interlinked wiki pages at ingest time (the "compiler" approach).
 
 But existing implementations are almost all **single-player local tools**, missing two critical pieces:
 
