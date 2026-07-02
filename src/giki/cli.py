@@ -16,6 +16,7 @@ from .commands.ingest import ingest_command
 from .commands.init import init_app
 from .commands.pr import pr_app
 from .commands.review import review_command
+from .commands.serve import serve_command
 from .console import show_banner
 
 
@@ -31,6 +32,7 @@ app.add_typer(config_app, name="config")
 app.command("review")(review_command)
 app.add_typer(branch_app, name="branch")
 app.add_typer(pr_app, name="pr")
+app.command("serve")(serve_command)
 
 
 @app.command("mcp-serve")

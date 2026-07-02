@@ -33,7 +33,7 @@ class TestTopLevelHelp:
         result = runner.invoke(app, ["--help"])
         assert result.exit_code == 0, result.output
         out = _ANSI_RE.sub("", result.stdout)
-        for name in ("init", "ingest", "config", "review", "mcp-serve", "branch", "pr"):
+        for name in ("init", "ingest", "config", "review", "mcp-serve", "branch", "pr", "serve"):
             assert name in out, f"expected {name!r} in help output:\n{out}"
         for name in ("lint", "merge", "collab", "chat", "fusion"):
             # word-boundary match so unrelated words like 'preserve' don't trigger
@@ -131,7 +131,7 @@ class TestIngestDelegation:
 
 @pytest.mark.parametrize(
     "mod_name",
-    ["lint", "merge", "collab", "serve", "chat", "fusion"],
+    ["lint", "merge", "collab", "chat", "fusion"],
 )
 def test_stub_modules_raise_notimplementederror(mod_name: str) -> None:
     mod = importlib.import_module(f"giki.commands.{mod_name}")
