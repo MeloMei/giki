@@ -111,6 +111,30 @@ llm:
 | `giki ingest <path...> [--branch NAME] [--yes]` | 把源文档编译成 wiki 页面。 |
 | `giki review [--pr N] [--post] [--json]` | 跑机械检查 + 语义审查。 |
 | `giki config show \| set <key> <value>` | 管理配置。 |
+| `giki mcp-serve` | 启动 MCP 服务器，供平台集成。 |
+
+## MCP 服务器（QoderWork / Claude Code / Codex）
+
+giki 可以作为 MCP（Model Context Protocol）服务器运行，让你直接在 QoderWork、Claude Code 或任何 MCP 兼容平台里使用——不需要自己的 LLM API key。
+
+```bash
+pip install giki-gitwiki
+```
+
+然后在平台的 MCP 配置里添加：
+
+```json
+{
+  "mcpServers": {
+    "giki": {
+      "command": "giki",
+      "args": ["mcp-serve"]
+    }
+  }
+}
+```
+
+重启平台后，就可以让平台初始化知识库、导入文档、审查改动——平台内置的 LLM 会驱动 giki 的流水线。
 
 ## 贡献
 

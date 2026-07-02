@@ -110,6 +110,30 @@ Works with Claude, GPT-4, Ollama, and any OpenAI-compatible endpoint.
 | `giki ingest <path...> [--branch NAME] [--yes]` | Compile sources into wiki pages. |
 | `giki review [--pr N] [--post] [--json]` | Run mechanical + semantic review. |
 | `giki config show \| set <key> <value>` | Manage config. |
+| `giki mcp-serve` | Start MCP server for platform integration. |
+
+## MCP Server (for QoderWork / Claude Code / Codex)
+
+giki can run as an MCP (Model Context Protocol) server, letting you use it directly inside QoderWork, Claude Code, or any MCP-compatible platform — no LLM API key needed.
+
+```bash
+pip install giki-gitwiki
+```
+
+Then add to your platform's MCP config:
+
+```json
+{
+  "mcpServers": {
+    "giki": {
+      "command": "giki",
+      "args": ["mcp-serve"]
+    }
+  }
+}
+```
+
+After restarting the platform, you can ask it to initialize a knowledge base, ingest documents, or review changes — the platform's built-in LLM will drive giki's pipeline.
 
 ## Contributing
 
