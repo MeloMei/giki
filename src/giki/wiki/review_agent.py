@@ -18,6 +18,7 @@ from ..review_models import (
 )
 from .linker import Linker
 from .parser import ParseError, parse_page
+from .relations import is_valid_relation_type
 from .store import WikiStore
 
 from ..llm.base import LLMAdapter, Message
@@ -183,6 +184,47 @@ def check_unrelated_edits(
             )
         ]
     return []
+
+
+def check_typed_links(
+    wiki_dir: Path, changes: list[FileChange]
+) -> list[MechanicalFinding]:
+    """Validate that typed wikilinks use one of the canonical relation types."""
+    findings: list[MechanicalFinding] = []
+
+    for change in changes:
+        if change.change_type not in (ChangeType.NEW, ChangeType.UPDATED):
+            continue
+        slug = change.wiki_slug
+        if not slug:
+            continue
+
+        page_path = wiki_dir / f"{slug}.md"
+        if not page_path.exists():
+            continue
+        try:
+            page = parse_page(page_path.read_text(encoding="utf-8"))
+        except ParseError:
+            continue
+
+        for link in page.links:
+            if link.link_type is not None and not is_valid_relation_type(
+                link.link_type
+            ):
+                findings.append(
+                    MechanicalFinding(
+                        rule_id="MECH-TYPED-LINK",
+                        severity="warn",
+                        message=(
+                            f"unknown link type '{link.link_type}' in "
+                            f"[[{link.link_type}::{link.target}]] on page "
+                            f"'{slug}'"
+                        ),
+                        page_slug=slug,
+                    )
+                )
+
+    return findings
 
 # --- Semantic Review (Phase 3) ---
 
