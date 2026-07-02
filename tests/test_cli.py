@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import re
 from pathlib import Path
 from unittest.mock import patch
 
@@ -11,6 +12,10 @@ from typer.testing import CliRunner
 
 from giki.cli import app
 from giki.orchestrator import IngestResult
+
+# Typer/rich may inject ANSI color codes in CI, splitting e.g. "--branch"
+# into "\x1b[1;36m-\x1b[1;36m-branch\x1b[0m".  Strip before substring checks.
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 
 @pytest.fixture
@@ -25,11 +30,9 @@ def runner() -> CliRunner:
 
 class TestTopLevelHelp:
     def test_help_lists_v01_commands(self, runner: CliRunner) -> None:
-        import re
-
         result = runner.invoke(app, ["--help"])
         assert result.exit_code == 0, result.output
-        out = result.stdout
+        out = _ANSI_RE.sub("", result.stdout)
         for name in ("init", "ingest", "config", "review"):
             assert name in out, f"expected {name!r} in help output:\n{out}"
         for name in ("lint", "merge", "collab", "serve", "chat", "fusion"):
@@ -57,7 +60,7 @@ class TestIngestHelp:
     def test_ingest_help_shows_flags(self, runner: CliRunner) -> None:
         result = runner.invoke(app, ["ingest", "--help"])
         assert result.exit_code == 0, result.output
-        out = result.stdout
+        out = _ANSI_RE.sub("", result.stdout)
         for flag in ("--branch", "--yes", "--dry-run", "--retry-failed"):
             assert flag in out, f"expected flag {flag!r} in ingest --help:\n{out}"
 

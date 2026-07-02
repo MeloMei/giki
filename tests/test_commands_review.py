@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
 from unittest.mock import patch
@@ -14,6 +15,9 @@ from typer.testing import CliRunner
 
 from giki.cli import app
 from giki.llm.base import LLMAdapter, LLMResponse, Message
+
+# Strip ANSI color codes that Typer/rich injects in CI environments.
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 
 @pytest.fixture
@@ -102,8 +106,9 @@ class TestReviewHelp:
     def test_help_shows_flags(self, runner):
         result = runner.invoke(app, ["review", "--help"])
         assert result.exit_code == 0, result.output
+        out = _ANSI_RE.sub("", result.stdout)
         for flag in ("--pr", "--post", "--json"):
-            assert flag in result.stdout
+            assert flag in out
 
 
 class TestReviewJson:
