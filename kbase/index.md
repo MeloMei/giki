@@ -3,6 +3,7 @@
 _Auto-maintained by giki. Human edits above the marker are preserved._
 
 <!-- giki:index-begin -->
+
 ## Uncategorized
 - [[cli-commands]] — giki CLI Commands
 - [[compilation-pipeline]] — Compilation Pipeline
@@ -11,4 +12,5 @@ _Auto-maintained by giki. Human edits above the marker are preserved._
 - [[github-action-integration]] — GitHub Action Integration
 - [[limitations-and-roadmap]] — Known Limitations and Roadmap
 - [[review-pipeline]] — Review Pipeline
+
 <!-- giki:index-end -->
