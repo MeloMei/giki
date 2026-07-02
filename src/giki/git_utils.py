@@ -16,7 +16,12 @@ class GitError(Exception):
 
 
 def open_repo(root: Path) -> git.Repo:
-    """Open the git repo at `root`. Raise GitError if not a repo."""
+    """Open the git repo at `root` (searches parent dirs). Raise GitError if not a repo."""
+    try:
+        return git.Repo(str(Path(root)), search_parent_directories=True)
+    except (git.InvalidGitRepositoryError, git.NoSuchPathError):
+        pass
+    # Fallback: direct open (may still fail with a clear error).
     try:
         return git.Repo(str(Path(root)))
     except (git.InvalidGitRepositoryError, git.NoSuchPathError) as e:
@@ -36,10 +41,15 @@ def ensure_clean_worktree(repo: git.Repo) -> None:
 
 
 def _relevant_untracked(repo: git.Repo) -> list[str]:
-    """Untracked files, ignoring `.giki-state/*`."""
+    """Untracked files, ignoring `.giki-state/*` at any depth."""
     return [
         p for p in repo.untracked_files
-        if not (p.startswith(".giki-state/") or p.startswith(".giki-state\\"))
+        if not (
+            p.startswith(".giki-state/")
+            or p.startswith(".giki-state\\")
+            or "/.giki-state/" in p
+            or "\\.giki-state\\" in p
+        )
     ]
 
 

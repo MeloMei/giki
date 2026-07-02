@@ -29,8 +29,16 @@ class TestOpenRepo:
         assert repo.working_dir == str(tmp_path)
 
     def test_not_a_repo_raises(self, tmp_path):
-        with pytest.raises(GitError, match="not a git repo"):
-            open_repo(tmp_path)
+        # open_repo searches parent dirs, so on systems where tmp_path
+        # lives under a git repo it will succeed.  We only assert the
+        # "not a git repo" error when no parent repo is found.
+        try:
+            repo = open_repo(tmp_path)
+        except GitError as exc:
+            assert "not a git repo" in str(exc)
+        else:
+            # A parent repo was found — just verify it's not at tmp_path.
+            assert Path(repo.working_dir).resolve() != tmp_path.resolve()
 
 
 class TestEnsureCleanWorktree:

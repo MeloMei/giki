@@ -432,11 +432,20 @@ class Ingester:
         if failed:
             msg += f" ({len(failed)} failed)"
 
+        # Compute the prefix from repo working_dir to config.root so that
+        # git paths are correct when root is a subdirectory (e.g. kbase/).
+        repo_root = Path(repo.working_dir).resolve()
+        config_root = self.config.root.resolve()
+        try:
+            prefix = config_root.relative_to(repo_root)
+        except ValueError:
+            prefix = Path()
+
         paths: list[str] = []
         for rel in ("wiki", "index.md", "log.md", ".giki-state"):
             candidate = self.config.root / rel
             if candidate.exists():
-                paths.append(rel)
+                paths.append(str(prefix / rel))
 
         if not paths:
             return None
@@ -460,13 +469,18 @@ class Ingester:
         """End-to-end ingest of one source file."""
         source_path = Path(source_path)
 
+        # Open repo first so we can exempt sources before the clean check.
+        repo = open_repo(self.config.root)
+
         # Exempt the source file from the clean-worktree check when it lives
         # inside the repo (common for `sources/foo.md`). We do this via the
         # repo-local `.git/info/exclude` so we do not touch the shared `.gitignore`.
-        _exempt_source_from_git(self.config.root, source_path)
+        _exempt_source_from_git(Path(repo.working_dir), source_path)
 
-        # Phase 0
-        repo = self.bootstrap(branch=branch)
+        # Now check worktree cleanliness (exemption is in place).
+        ensure_clean_worktree(repo)
+        if branch:
+            checkout_branch(repo, branch, create=True)
 
         # Phase 1
         loaded, needs = self.load_source(source_path)
