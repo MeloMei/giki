@@ -13,14 +13,14 @@ sources:
 
 # GitHub Action Integration
 
-giki treats knowledge like code, bringing the full power of CI/CD to your wiki. By integrating giki with GitHub Actions, every pull request targeting your wiki automatically undergoes a rigorous two-phase review pipeline: mechanical checks (dead links, schema validation, index sync) followed by an LLM-powered semantic review that evaluates content against your `wiki-rules.md`.
+giki treats knowledge like code, bringing the full power of CI/CD to your wiki. By integrating giki with GitHub Actions, every pull request targeting your wiki automatically undergoes a rigorous [[review-pipeline|two-phase review pipeline]]: [[review-pipeline|mechanical checks]] (dead links, schema validation, index sync) followed by an LLM-powered [[review-pipeline|semantic review]] that evaluates content against your `[[configuration|wiki-rules.md]]`.
 
 ## Generating the Workflow
 
 To automatically configure GitHub Actions for your knowledge base, initialize giki with the action flag:
 
 ```bash
-giki init --with-action
+[[cli-commands|giki init]] --with-action
 ```
 
 This generates a ready-to-use workflow file at `.github/workflows/giki-review.yml` in your repository.
@@ -57,7 +57,7 @@ jobs:
       - name: Install giki
         run: pip install giki
 
-      - name: Run giki review
+      - name: Run [[cli-commands|giki review]]
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -79,4 +79,13 @@ To optimize CI minutes and ensure the review bot only runs when relevant knowled
 - **`wiki/**`**: Triggers when any wiki page is created, modified, or deleted.
 - **`index.md`**: Triggers when the categorized directory is updated.
 - **`wiki-rules.md`**: Triggers when your team's wiki rules change (ensuring reviews use the latest standards).
-- **`.giki/**`**: Triggers when giki configuration or internal state is modified.
+- **`.giki/**`**: Triggers when [[configuration|giki configuration]] or internal state is modified.
+
+---
+
+## Related
+- [[review-pipeline]]
+- [[cli-commands]]
+- [[configuration]]
+- [[giki]]
+- [[compilation-pipeline]]
