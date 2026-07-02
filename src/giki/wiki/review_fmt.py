@@ -72,7 +72,7 @@ def format_markdown(
 
 
 def _format_finding_md(f: MechanicalFinding | SemanticFinding) -> str:
-    sev_icon = {"blocker": "\U0001f6ab", "warn": "\u26a0\ufe0f", "nit": "\U0001f4a1"}.get(f.severity, "\u2022")
+    sev_icon = {"blocker": "[blocker]", "warn": "[warn]", "nit": "[nit]"}.get(f.severity, "[?]")
     page_ref = f" `{f.page_slug}`" if f.page_slug else ""
     if isinstance(f, SemanticFinding):
         evidence = f.evidence
