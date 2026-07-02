@@ -9,6 +9,13 @@ import pytest
 import yaml
 
 
+def test_mcp_serve_cli_command_registered():
+    """giki mcp-serve should be a registered CLI command."""
+    from giki.cli import app
+    cmd_names = [cmd.name for cmd in app.registered_commands]
+    assert "mcp-serve" in cmd_names
+
+
 def test_mcp_server_module_importable():
     """The giki.mcp_server module must be importable."""
     mod = importlib.import_module("giki.mcp_server")

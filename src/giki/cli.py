@@ -1,6 +1,6 @@
 """giki CLI entry point.
 
-Registers v0.1 commands: ``init``, ``ingest``, ``config``, ``review``.
+Registers commands: ``init``, ``ingest``, ``config``, ``review``, ``mcp-serve``.
 Future command modules (``lint``, ``merge``, ``collab``, ``serve``,
 ``chat``, ``fusion``) exist as scaffolding but are not wired up.
 """
@@ -26,6 +26,18 @@ app.add_typer(init_app, name="init")
 app.command("ingest")(ingest_command)
 app.add_typer(config_app, name="config")
 app.command("review")(review_command)
+
+
+@app.command("mcp-serve")
+def mcp_serve() -> None:
+    """Start the giki MCP server (stdio transport).
+
+    Use this to connect giki to QoderWork, Claude Code, or other
+    MCP-compatible platforms. The platform's built-in LLM drives
+    giki's compilation and review pipeline.
+    """
+    from .mcp_server import main
+    main()
 
 
 def _version_callback(value: bool) -> None:
