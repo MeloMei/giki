@@ -1,94 +1,78 @@
 # giki
 
-**用软件工程方法做 LLM Wiki -- 知识的持续集成（Knowledge CI/CD）**
+<h4 align="center">
 
-[English](../README.md) | 详细设计文档: [giki-v0.1-design.md](superpowers/specs/2026-06-30-giki-v0.1-design.md)
+📚 Git 驱动的 LLM Wiki · 像管理代码一样管理知识
+
+</h4>
+
+<p align="center">
+<a href="#-为什么需要-giki">为什么</a> •
+<a href="#-核心特性">特性</a> •
+<a href="#-快速开始">快速开始</a> •
+<a href="#-工作原理">原理</a> •
+<a href="#-与其他方案对比">对比</a> •
+<a href="#-路线图">路线图</a>
+</p>
+
+<p align="center">
+<a href="https://github.com/MeloMei/giki/actions/workflows/ci.yml"><img src="https://github.com/MeloMei/giki/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+<a href="https://pypi.org/project/giki-gitwiki/"><img src="https://img.shields.io/pypi/v/giki-gitwiki" alt="PyPI"></a>
+<img src="https://img.shields.io/badge/python-3.11+-blue" alt="Python">
+<img src="https://img.shields.io/badge/license-MIT-yellow" alt="License">
+</p>
+
+<p align="center">
+<a href="../README.md">English</a> · <a href="superpowers/specs/2026-06-30-giki-v0.1-design.md">设计文档</a>
+</p>
 
 ---
 
-## 项目定位
+## 🤔 为什么需要 giki？
 
-现有的 LLM 知识管理方案通常依赖 RAG（查询时检索）或简单的对话工具，缺少对知识质量的系统性管控。giki 提出了一条不同的路径：在文档入库时就将其"编译"为结构化的 wiki 页面，并借助 git 版本控制和 PR Review 机制持续保障质量。
+Andrej Karpathy 提出的 **LLM Wiki** 模式正在改变知识管理——大模型不再在查询时从碎片中临场拼凑答案（"解释器"），而是在摄入时就将知识"编译"成结构化、互相关联的 Wiki 页面（"编译器"）。
 
-核心理念可以概括为一句话：**像做 CI/CD 一样做知识管理。**
+然而，现有实现几乎都是**单人本地工具**，缺少两样东西：
 
-- **编译时处理，而非查询时检索。** 原始文档经过 LLM 分析、综合、双链三步流水线，产出高质量的 wiki 页面。
-- **每次修改都有 git 记录。** 所有 AI 生成的内容都通过 git commit 追踪，可 diff、可回滚、可审查。
-- **机器审查 + 语义审查双保险。** PR Review Bot 同时执行机械校验和 LLM 语义审查，确保 wiki 的一致性和准确性。
+1. **团队协作**——无法让团队安全地共建同一本"活百科"
+2. **质量门禁**——AI 写知识很快，但谁来审查对不对？未经检查的盲目编译失败率高达 53%～60%（WiCER, 2026）
 
-## 核心特性
+**giki** 将软件工程的协作方法注入 LLM Wiki：
 
-### 1. 两步编译流水线
+- 每次 AI 修改都是一条可审计、可回滚的 `git commit`
+- 团队在分支上让 LLM 自由编译，通过 Pull Request 审核后汇入主干
+- **LLM 自动审查**作为第一道质量防线，在 PR 时自动检查语义矛盾和规则合规性
 
-原始文档经过三个阶段处理：
+> 用软件工程的协作方法，做知识的持续集成（Knowledge CI/CD）。
 
-1. **Analyze** -- LLM 分析源文档，提取候选页面清单（标题、摘要、关键概念）。
-2. **Synthesize** -- 根据候选清单生成正式 wiki 页面正文，包含 frontmatter 元数据。
-3. **Crosslink** -- 扫描全库，在相关页面之间补充 `[[wikilink]]` 双链引用。
+<!-- TODO: 截图——giki ingest 终端输出 -->
+<!-- <p align="center"><img src="screenshots/ingest-demo.png" alt="giki ingest 演示" width="700"></p> -->
 
-### 2. Git 原生版本控制
+---
 
-每次 `ingest` 操作自动创建 git 分支并提交 commit。所有 AI 修改都可通过 `git diff` 审查，不满意可随时回滚。支持 `--branch` 参数指定自定义分支名。
+## ✨ 核心特性
 
-### 3. PR Review Bot
+**🧠 三步编译流水线**
+Analyze（分析文档，提取候选概念）→ Synthesize（生成结构化 Wiki 页面）→ Crosslink（补充双向链接）。滑动窗口分片处理，一本书也能完整编译不截断。
 
-`giki review` 提供两层审查：
+**🛡️ AI 自动审查（PR Review Bot）**
+机械检查先跑（零误报）：断链检测、frontmatter 格式校验、index 同步、无关编辑预警。然后逐页 LLM 语义审查，依据 `wiki-rules.md` 的规则逐项评估，输出 `approve` / `comment` / `request-changes`。
 
-- **机械检查** -- 断链检测、frontmatter 格式校验、index 文件同步性验证。
-- **LLM 语义审查** -- 逐页调用 LLM 评估内容准确性、完整性、表述质量，输出评分和建议。
+**🔄 Git 原生版本控制**
+每次 ingest 产出干净 commit（`ingest: observer.md — 3 of 3 pages`）。`--branch` 分支隔离，完整支持 `git diff` / `git revert` / `git rebase`。
 
-支持 `--post` 将审查结果发布到 GitHub PR 评论。
+**📇 智能索引**
+自动维护 `index.md`（分类目录）和 `log.md`（时间线），知识库全貌一目了然，无需手动维护。
 
-### 4. 智能索引
+**🔗 Obsidian 原生兼容**
+标准 YAML frontmatter + `[[wikilink]]` 语法，Obsidian 打开即用，直接浏览知识图谱。
 
-自动维护两个索引文件：
+**🔌 多模型可插拔**
+支持 Claude、GPT-4/OpenAI、Ollama 及任何 OpenAI 兼容接口。编译 Agent 和审查 Agent 独立配置，可用不同模型交叉验证。
 
-- `index.md` -- 分类目录，按主题聚合页面。
-- `log.md` -- 时间线，按入库时间排列页面。
+---
 
-每次 ingest 和 review 后自动更新，无需手动维护。
-
-### 5. Obsidian 兼容
-
-输出为标准 Markdown + YAML frontmatter + `[[wikilink]]` 语法，可直接用 Obsidian 打开并浏览，无需额外转换。
-
-## 架构概览
-
-```mermaid
-flowchart TD
-    subgraph 输入源
-        A[.md / .txt / .pdf]
-    end
-
-    subgraph "giki ingest 流水线"
-        B[Analyze<br/>提取候选页面]
-        C[Synthesize<br/>生成 wiki 正文]
-        D[Crosslink<br/>补充双链引用]
-    end
-
-    subgraph 输出
-        E[wiki/*.md<br/>结构化页面]
-        F[index.md<br/>分类目录]
-        G[log.md<br/>时间线]
-    end
-
-    subgraph 质量保障
-        H[git commit<br/>版本控制]
-        I[PR Review<br/>机械检查 + 语义审查]
-    end
-
-    A --> B --> C --> D --> E
-    D --> F
-    D --> G
-    E --> H --> I
-```
-
-## 快速开始
-
-### 环境要求
-
-- Python >= 3.11
-- Git
+## ⚡ 快速开始
 
 ### 安装
 
@@ -99,106 +83,159 @@ pip install giki-gitwiki
 ### 初始化知识库
 
 ```bash
+mkdir my-kb && cd my-kb && git init
 giki init
 ```
 
-该命令在当前目录创建知识库结构（`wiki/`、`sources/`、配置文件等）。添加 `--with-action` 可同时生成 GitHub Actions 工作流文件。
+<!-- TODO: 截图——giki init 输出 -->
+<!-- <p align="center"><img src="screenshots/init-demo.png" alt="giki init" width="600"></p> -->
+
+这会在当前目录创建 `.giki/config.yaml`、`wiki-rules.md`、`wiki/`、`sources/`、`index.md`、`log.md`。
 
 ### 配置 LLM
 
-```bash
-giki config set llm.provider anthropic
-giki config set llm.api_key sk-ant-xxx
+编辑 `.giki/config.yaml`：
+
+```yaml
+llm:
+  compile:
+    provider: claude          # 或 "openai"（兼容 Ollama 等）
+    model: claude-sonnet-4-5-20250929
+    base_url: https://api.anthropic.com
+    api_key_env: ANTHROPIC_API_KEY
+  review:
+    provider: openai          # 审查可以用不同模型交叉验证
+    model: gpt-4o
+    base_url: https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY
 ```
 
-也支持 OpenAI 兼容接口（含 Ollama、vLLM、LM Studio）：
+设置 API Key：
 
 ```bash
-giki config set llm.provider openai
-giki config set llm.base_url http://localhost:11434/v1
-giki config set llm.model llama3
+export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
 ### 导入文档
 
 ```bash
-# 导入单个文件
-giki ingest notes/meeting.md
-
-# 导入多个文件
-giki ingest docs/*.md docs/*.pdf
-
-# 指定分支名
-giki ingest report.pdf --branch feature/quarterly-report
-
-# 预览模式（不实际写入）
-giki ingest draft.md --dry-run
+cp ~/notes/design-patterns.md sources/
+giki ingest sources/design-patterns.md --branch wiki/design-patterns --yes
 ```
 
-### 审查
+<!-- TODO: 截图——giki ingest 显示候选页面和 commit -->
+<!-- <p align="center"><img src="screenshots/ingest-demo.png" alt="giki ingest" width="700"></p> -->
+
+giki 会分析源文档、提议 Wiki 页面、通过 LLM 生成正文、补充双向链接、更新 `index.md` 和 `log.md`，最后把所有变更提交到 `wiki/design-patterns` 分支。
+
+### 审查变更
 
 ```bash
-# 审查当前分支
+# 本地审查（HEAD vs main）
 giki review
 
-# 审查指定 PR
-giki review --pr 42
+# 审查 GitHub PR 并发布评论
+giki review --pr 42 --post
 
-# 输出 JSON 格式
+# JSON 输出（CI 友好）
 giki review --json
 ```
 
-## 命令参考
+<!-- TODO: 截图——giki review 显示审查发现 -->
+<!-- <p align="center"><img src="screenshots/review-demo.png" alt="giki review" width="700"></p> -->
 
-| 命令 | 说明 | 常用参数 |
-|------|------|----------|
-| `giki init` | 初始化知识库 | `--with-action` 生成 CI 配置 |
-| `giki ingest <path...>` | 编译原始文档 | `--branch` 指定分支, `--yes` 跳过确认, `--dry-run` 预览, `--retry-failed` 重试失败项 |
-| `giki review` | PR 审查 | `--pr N` 指定 PR, `--post` 发布评论, `--json` JSON 输出 |
-| `giki config` | 配置管理 | `show` 查看, `set` 修改, `tips` 优化建议 |
+### 在 Obsidian 中浏览
 
-## 配置
+```bash
+open -a Obsidian wiki/
+```
 
-通过 `giki config` 管理，配置项包括：
+<!-- TODO: 截图——Obsidian 图谱视图展示 wiki 页面和链接关系 -->
+<!-- <p align="center"><img src="screenshots/obsidian-graph.png" alt="Obsidian 图谱" width="700"></p> -->
 
-| 配置项 | 说明 | 示例值 |
-|--------|------|--------|
-| `llm.provider` | LLM 提供商 | `anthropic` / `openai` |
-| `llm.api_key` | API 密钥 | `sk-ant-...` |
-| `llm.base_url` | API 地址（OpenAI 兼容） | `http://localhost:11434/v1` |
-| `llm.model` | 模型名称 | `claude-sonnet-4-20250514` |
+---
 
-使用 `giki config tips` 可获取针对当前配置的优化建议。
+## 🧠 工作原理
 
-## 已知限制
+```
+sources/  ──►  [LLM 编译引擎]  ──►  wiki/（结构化知识库）
+ 原始文档      Analyze → Synthesize       自动更新 index.md + log.md
+                 → Crosslink
 
-当前版本（v0.1 alpha）存在以下限制：
+└──────────────────── Git 管理 ──────────────────────┘
+   每次修改产出干净 commit；分支协作走 PR 流程
 
-1. **PDF 不做 OCR** -- 扫描型 PDF（图片格式）会被拒绝，仅支持文本型 PDF。
-2. **不支持远程数据源** -- 暂不支持 URL、Notion、Confluence 等远程来源，仅支持本地文件（`.md`、`.txt`、`.pdf`）。
-3. **Wikilink 功能有限** -- 不支持 `#heading` 锚点、`^block-id` 块引用、`![[embed]]` 嵌入语法。
-4. **wiki 目录平铺** -- 所有页面存放在 `wiki/` 根目录，不支持子目录分类。
-5. **断点续传需手动触发** -- 流水线中断后需使用 `--retry-failed` 手动重试，不会自动恢复。
-6. **不内置 token 预估** -- 无法提前估算 LLM 调用的 token 消耗。
+┌──────────── AI 自动审查（PR 触发）────────────────┐
+│  读取 wiki-rules.md → 获取 diff → 机械检查       │
+│  → LLM 语义审查 → 发布审查 Comment               │
+│  (approve / comment / request-changes)           │
+└──────────────────────────────────────────────────┘
+```
 
-## 路线图
+1. **摄入**——LLM 阅读源文档，提取关键概念和实体
+2. **综合**——结合已有知识，生成或更新 Wiki 页面，包含完整的 frontmatter 元数据
+3. **关联**——在相关页面间自动创建 `[[双向链接]]`，生成 `## Related` 区块
+4. **索引**——同步更新 `index.md`（分类目录）和 `log.md`（时间线）
+5. **提交**——所有变更通过 `git commit` 固化
+6. **审查**——PR 触发审查 Agent：先跑机械检查，再逐页 LLM 语义审查
+7. **协作**——团队基于审查意见讨论、修正、合并
 
-### v0.2
+---
 
-- 类型化 Wikilink（`[[page|alias]]`、带类型标注的链接）
-- AI Merge（智能合并冲突解决）
-- `branch` / `pr` 协作命令，支持多人并行编辑
+## 👥 与其他方案对比
 
-### v0.3
+| 特性 | **giki** | 传统 RAG（NotebookLM 等）| 单人 LLM Wiki 工具 | Git Wiki（Gollum 等）|
+| :--- | :---: | :---: | :---: | :---: |
+| 知识编译 | ✅ 编译式 | ❌ 检索式 | ✅ | ❌ |
+| 版本控制 | ✅ Git 全流程 | ❌ | ✅ 单用户 | ✅ |
+| 团队协作 | ✅ 分支 + PR | ❌ | ❌ | ✅ |
+| AI 审查 | ✅ 机械 + 语义 | ❌ | ❌ | ❌ |
+| Obsidian 兼容 | ✅ | ❌ | ✅ | ✅ |
+| 智能索引 | ✅ 自动目录 + 时间线 | ❌ | 部分 | ❌ |
+| GitHub Actions | ✅ PR 自动审查 | ❌ | ❌ | ❌ |
 
-- 本地 Web UI（基于 D3 的知识图谱可视化）
-- Q&A 模块（基于 RAG 的问答能力）
-- 跨域知识融合（多知识库互联）
+---
 
-## 技术栈
+## 📖 命令参考
 
-Python 3.11+ / Typer / GitPython / pypdf / httpx / PyYAML
+| 命令 | 说明 |
+|---|---|
+| `giki init [--with-action]` | 初始化知识库。`--with-action` 同时生成 GitHub Actions 工作流。 |
+| `giki ingest <path...> [--branch NAME] [--yes] [--dry-run] [--retry-failed]` | 编译原始文档为 Wiki 页面。 |
+| `giki review [--pr N] [--post] [--json] [--base BRANCH]` | 两层审查：机械检查 + LLM 语义审查。 |
+| `giki config show \| set <key> <value> \| tips` | 管理 `.giki/config.yaml` 配置。 |
 
-## 许可证
+`review` 退出码：`0` = approve 或 comment，`1` = request-changes。
 
-详见项目根目录 LICENSE 文件。
+---
+
+## 🗺️ 路线图
+
+- [x] **v0.1 核心**——三步编译流水线、PR Review Bot、Git 原生工作流、Obsidian 兼容
+- [x] **v0.1 Dog-fooding**——`kbase/` 目录：giki 用自己的文档作为源材料，演示完整工作流
+- [ ] **v0.2 类型化 Wikilink**——`[[requires::X]]`、`[[contradicts::Y]]`，8 种关系类型
+- [ ] **v0.2 协作命令**——`giki branch` / `giki pr`，AI 辅助解决合并冲突
+- [ ] **v0.3 Web UI**——`giki serve` 启动本地管理页面（D3 知识图谱 + 全文搜索）
+- [ ] **v0.3 智能问答**——`giki chat`，BM25 检索 + RAG
+- [ ] **v0.3 跨域融合**——多知识库联邦索引（`.wiki-fusion.yaml`）
+
+---
+
+## 🤝 贡献
+
+详见 [CONTRIBUTING.md](../CONTRIBUTING.md)。
+
+```bash
+git clone https://github.com/MeloMei/giki.git
+cd giki
+pip install -e ".[dev]"
+pytest -q
+```
+
+---
+
+## 📄 许可证
+
+[MIT License](../LICENSE)
+
+<p align="center"><sub>献给那些相信"知识应该持续增值"的人。</sub></p>
