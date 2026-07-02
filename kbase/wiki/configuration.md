@@ -15,7 +15,7 @@ sources:
 
 The `.giki/config.yaml` file is the central configuration for a giki knowledge base. It is automatically created when you run `giki init` and defines how giki interacts with LLMs, how source documents are ingested, and how PR review behaves. 
 
-You can manage this file directly in your text editor, or use the built-in CLI commands: `giki config show`, `giki config set <key> <value>`, and `giki config tips`.
+You can manage this file directly in your text editor, or use the built-in [[cli-commands|CLI commands]]: `giki config show`, `giki config set <key> <value>`, and `giki config tips`.
 
 ## Structure of `.giki/config.yaml`
 
@@ -23,11 +23,11 @@ The configuration file is divided into three main sections:
 
 - **`llm`**: Configures the LLM providers and models used for both compilation and review.
 - **`ingest`**: Controls how source documents are chunked and processed before being sent to the LLM.
-- **`review`**: Tunes the mechanical and semantic PR review thresholds and GitHub comment behavior.
+- **`review`**: Tunes the mechanical and [[review-pipeline|semantic PR review]] thresholds and GitHub comment behavior.
 
 ## LLM Settings
 
-The `llm` block defines the models used for the two-phase compilation pipeline (`compile`) and the semantic PR review (`review`). You can configure them to use the same or different providers and models.
+The `llm` block defines the models used for the two-phase [[compilation-pipeline|compilation pipeline]] (`compile`) and the semantic PR review (`review`). You can configure them to use the same or different providers and models.
 
 - **`provider`**: The API provider type (`claude` or `openai`).
 - **`model`**: The specific model identifier (e.g., `claude-sonnet-4-5-20250929`, `llama3`).
@@ -84,7 +84,7 @@ ingest:
 
 ## Review Settings
 
-The `review` block tunes the behavior of the AI PR Review Bot, specifically adjusting how mechanical checks and the LLM semantic reviewer evaluate changes and post comments to GitHub.
+The `review` block tunes the behavior of the AI PR Review Bot, specifically adjusting how [[review-pipeline|mechanical checks]] and the LLM semantic reviewer evaluate changes and post comments to GitHub.
 
 - **`unrelated_edit_threshold`**: The maximum allowed proportion or amount of edits that are considered unrelated to the main page topic before the review flags it. This helps catch scope creep or accidental commits.
 - **`severity_blocking`**: Defines which severity levels of violations will trigger a `request-changes` verdict instead of just a `comment` (e.g., blocking on `error` but passing on `warning`).
@@ -97,3 +97,12 @@ review:
   severity_blocking: error
   pr_comment_collapse: true
 ```
+
+---
+
+## Related
+- [[giki]]
+- [[cli-commands]]
+- [[compilation-pipeline]]
+- [[review-pipeline]]
+- [[github-action-integration]]
