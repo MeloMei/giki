@@ -10,6 +10,7 @@ Frontmatter format (YAML between `---` fences):
 
 Wikilink syntax:
     [[target]] or [[target|display]] or [[target#heading]] (# ignored in v0.1)
+    [[type::target]] or [[type::target|display]]  (typed wikilinks, v0.2)
 """
 
 from __future__ import annotations
@@ -35,7 +36,7 @@ def _as_iso_str(value: Any) -> str:
 
 
 _FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n(.*)\Z", re.DOTALL)
-_WIKILINK_RE = re.compile(r"\[\[([^\[\]\|]+?)(?:\|([^\[\]]+?))?\]\]")
+_WIKILINK_RE = re.compile(r"\[\[(?:([a-z][a-z_-]*)::)?([^\[\]\|]+?)(?:\|([^\[\]]+?))?\]\]")
 
 
 class ParseError(Exception):
@@ -46,6 +47,7 @@ class ParseError(Exception):
 class WikiLink:
     target: str
     display: str | None
+    link_type: str | None = None
 
 
 @dataclass
@@ -98,11 +100,12 @@ def parse_page(text: str) -> WikiPage:
 def _extract_links(body: str) -> list[WikiLink]:
     links: list[WikiLink] = []
     for match in _WIKILINK_RE.finditer(body):
-        target = match.group(1).strip()
-        display = match.group(2).strip() if match.group(2) else None
+        link_type = match.group(1)  # None when no ``type::`` prefix
+        target = match.group(2).strip()
+        display = match.group(3).strip() if match.group(3) else None
         # v0.1: strip #heading suffix if present
         if "#" in target:
             target = target.split("#", 1)[0].strip()
         if target:
-            links.append(WikiLink(target=target, display=display))
+            links.append(WikiLink(target=target, display=display, link_type=link_type))
     return links
