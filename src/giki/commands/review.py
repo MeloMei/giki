@@ -34,6 +34,7 @@ from ..wiki.review_agent import (
     check_dead_links,
     check_frontmatter,
     check_index_sync,
+    check_typed_links,
     check_unrelated_edits,
     review_page_semantic,
 )
@@ -111,6 +112,9 @@ def review_command(
     all_findings.extend(
         check_unrelated_edits(changes, cfg.review.unrelated_edit_threshold)
     )
+
+    # Typed wikilink validation
+    all_findings.extend(check_typed_links(wiki_dir, wiki_changes))
 
     # Semantic review per page
     pages_reviewed = 0
