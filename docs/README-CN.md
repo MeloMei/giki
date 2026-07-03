@@ -107,7 +107,7 @@ llm:
     api_key_env: OPENAI_API_KEY
 ```
 
-支持 Claude、GPT-4、Ollama，以及任何 OpenAI 兼容接口。
+支持 Claude、GPT、Ollama，以及任何 OpenAI 兼容接口。
 
 ## 命令
 
@@ -124,9 +124,9 @@ llm:
 | `giki config show \| set <key> <value>` | 管理配置。 |
 | `giki mcp-serve` | 启动 MCP 服务器，供平台集成。 |
 
-## MCP 服务器（QoderWork / Claude Code / Codex）
+## MCP 服务器（Claude Code / Codex）
 
-giki 可以作为 MCP（Model Context Protocol）服务器运行，让你直接在 QoderWork、Claude Code 或任何 MCP 兼容平台里使用——不需要自己的 LLM API key。
+giki 可以作为 MCP（Model Context Protocol）服务器运行，让你直接在 Codex、Claude Code 或任何 MCP 兼容平台里使用——不需要自己的 LLM API key。
 
 ```bash
 pip install giki-gitwiki
