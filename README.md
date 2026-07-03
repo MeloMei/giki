@@ -122,7 +122,7 @@ Works with Claude, GPT, Ollama, and any OpenAI-compatible endpoint.
 | `giki config show \| set <key> <value>` | Manage config. |
 | `giki mcp-serve` | Start MCP server for platform integration. |
 
-## MCP Server (for QoderWork / Claude Code / Codex)
+## MCP Server (for Claude Code / Codex)
 
 giki can run as an MCP (Model Context Protocol) server, letting you use it directly inside Codex, Claude Code, or any MCP-compatible platform — no LLM API key needed.
 
