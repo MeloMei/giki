@@ -17,3 +17,7 @@ giki.md
 
 # Dog-fooding wiki (local demo, not shipped)
 kbase/
+
+# Screenshot guides (keep .png only)
+docs/screenshots/*.md
+docs/screenshots/.gitkeep

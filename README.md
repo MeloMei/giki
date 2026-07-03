@@ -63,6 +63,28 @@ The review bot runs mechanical checks first (dead links, frontmatter format, ind
 
 Point Obsidian at your `wiki/` directory and you get the full graph view with backlinks, local search, and wikilink navigation. No export needed.
 
+<p align="center"><img src="docs/screenshots/obsidian-graph.png" alt="Obsidian graph view" width="650"></p>
+
+**Launch a local web UI:**
+
+```bash
+giki serve
+```
+
+<p align="center"><img src="docs/screenshots/serve-ui.png" alt="giki serve web UI" width="650"></p>
+
+D3 knowledge graph visualization, full-text search, and a markdown page viewer — all in your browser at `localhost:8080`. No dependencies, pure Python stdlib.
+
+**Ask your knowledge base questions:**
+
+```bash
+giki chat "观察者模式有什么应用场景？"
+```
+
+<p align="center"><img src="docs/screenshots/chat.png" alt="giki chat Q&A" width="650"></p>
+
+BM25 retrieves relevant pages, then the LLM generates an answer grounded in your wiki content.
+
 ## How it works
 
 The core loop:

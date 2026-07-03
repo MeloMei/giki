@@ -65,6 +65,28 @@ giki review --base main
 
 把 Obsidian 指向 `wiki/` 目录，立刻获得完整的图谱视图、反向链接和本地搜索。不需要导出。
 
+<p align="center"><img src="screenshots/obsidian-graph.png" alt="Obsidian 图谱视图" width="650"></p>
+
+**启动本地 Web UI：**
+
+```bash
+giki serve
+```
+
+<p align="center"><img src="screenshots/serve-ui.png" alt="giki serve Web UI" width="650"></p>
+
+D3 知识图谱可视化、全文搜索、Markdown 页面查看器——全在浏览器 `localhost:8080`。纯 Python stdlib，无额外依赖。
+
+**向知识库提问：**
+
+```bash
+giki chat "观察者模式有什么应用场景？"
+```
+
+<p align="center"><img src="screenshots/chat.png" alt="giki chat 问答" width="650"></p>
+
+BM25 检索相关页面，LLM 基于 wiki 内容生成回答。
+
 ## 工作原理
 
 核心流程：
