@@ -23,6 +23,12 @@ The name giki comes from "git wiki." It brings software engineering's git workfl
 
 Like CI/CD for your knowledge base.
 
+| Solution Name       | Knowledge Processing | Version Control          | Collaboration Mode       | Content Validation       | Interface Form          | Knowledge Base Interoperability | Note Tool Compatibility |
+|---------------------|----------------------|--------------------------|--------------------------|--------------------------|-------------------------|--------------------------------|-------------------------|
+| Custom Solution     | ✅ Compiled-style    | ✅ Full Git lifecycle    | ✅ PR/branch workflow    | ✅ Semantic + rule check | ✅ Local zero-dependency | ✅ Joint index interoperability | ✅ Obsidian native compatible |
+| Traditional RAG | ❌ Retrieval-style   | ❌ No version control    | ❌ No team collaboration | ❌ No automated review   | ✅ Cloud-based access   | ❌ No cross-base integration    | ❌ Incompatible with Obsidian |
+| LLM Wiki | ✅ Knowledge compilation | ✅ Single-user versioning | ❌ No team collaboration | ❌ No automated validation | ⚠️ Partial support | ❌ No cross-base interoperability | ✅ Obsidian compatible |
+
 ## See it in action
 
 
