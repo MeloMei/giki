@@ -278,13 +278,14 @@ class TestNotFound:
 
 class TestServeCLI:
     def test_serve_help(self):
+        import re
         from typer.testing import CliRunner
         from giki.cli import app
 
         runner = CliRunner()
         result = runner.invoke(app, ["serve", "--help"])
         assert result.exit_code == 0
-        out = result.stdout
+        out = re.sub(r"\x1b\[[0-9;]*m", "", result.stdout)
         assert "--port" in out
         assert "--host" in out
         assert "--root" in out

@@ -94,9 +94,10 @@ class TestBuildRagPrompt:
 
 class TestChatCLIHelp:
     def test_chat_help(self, runner: CliRunner) -> None:
+        import re
         result = runner.invoke(app, ["chat", "--help"])
         assert result.exit_code == 0
-        out = result.stdout
+        out = re.sub(r"\x1b\[[0-9;]*m", "", result.stdout)
         assert "--top-k" in out
         assert "--root" in out
 

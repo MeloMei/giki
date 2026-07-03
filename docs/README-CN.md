@@ -110,6 +110,11 @@ llm:
 | `giki init [--with-action]` | 初始化知识库。加 `--with-action` 会生成 GitHub Actions 自动审查。 |
 | `giki ingest <path...> [--branch NAME] [--yes]` | 把源文档编译成 wiki 页面。 |
 | `giki review [--pr N] [--post] [--json]` | 跑机械检查 + 语义审查。 |
+| `giki branch list \| create \| switch` | 管理知识编译分支。 |
+| `giki pr create \| list \| review \| merge` | 管理 Pull Request（需要 gh CLI）。 |
+| `giki lint [--fix]` | 检查 wiki 健康：断链、孤立页、frontmatter 问题。`--fix` 自动修复。 |
+| `giki serve [--port N]` | 启动本地 Web UI，含 D3 知识图谱和搜索。 |
+| `giki chat ["问题"]` | 向知识库提问。BM25 检索 + LLM RAG。 |
 | `giki config show \| set <key> <value>` | 管理配置。 |
 | `giki mcp-serve` | 启动 MCP 服务器，供平台集成。 |
 

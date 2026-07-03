@@ -211,9 +211,10 @@ class TestSlugViolations:
 
 class TestLintCLI:
     def test_lint_help(self, runner: CliRunner) -> None:
+        import re
         result = runner.invoke(app, ["lint", "--help"])
         assert result.exit_code == 0
-        out = result.stdout
+        out = re.sub(r"\x1b\[[0-9;]*m", "", result.stdout)
         assert "--fix" in out
         assert "--root" in out
 

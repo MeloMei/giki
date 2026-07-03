@@ -109,6 +109,11 @@ Works with Claude, GPT-4, Ollama, and any OpenAI-compatible endpoint.
 | `giki init [--with-action]` | Set up a knowledge base. Add `--with-action` for GitHub Actions auto-review. |
 | `giki ingest <path...> [--branch NAME] [--yes]` | Compile sources into wiki pages. |
 | `giki review [--pr N] [--post] [--json]` | Run mechanical + semantic review. |
+| `giki branch list \| create \| switch` | Manage branches for knowledge compilation. |
+| `giki pr create \| list \| review \| merge` | Manage pull requests (requires gh CLI). |
+| `giki lint [--fix]` | Check wiki health: dead links, orphans, frontmatter issues. `--fix` auto-repairs. |
+| `giki serve [--port N]` | Start local web UI with D3 knowledge graph and search. |
+| `giki chat ["question"]` | Ask your knowledge base questions. BM25 retrieval + LLM RAG. |
 | `giki config show \| set <key> <value>` | Manage config. |
 | `giki mcp-serve` | Start MCP server for platform integration. |
 
