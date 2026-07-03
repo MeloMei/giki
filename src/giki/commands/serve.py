@@ -287,8 +287,15 @@ class GikiHandler(BaseHTTPRequestHandler):
 
     def _serve_pages(self):
         pages = []
-        for slug, page in self.store.all_pages():
-            pages.append({"slug": slug, "title": page.title, "tags": page.tags})
+        for slug in self.store.list_pages():
+            try:
+                raw = self.store.read(slug)
+                from ..wiki.parser import parse_page
+                page = parse_page(raw)
+                pages.append({"slug": slug, "title": page.title, "tags": page.tags})
+            except Exception:
+                # Skip pages that fail to parse (e.g. missing frontmatter)
+                pages.append({"slug": slug, "title": slug, "tags": []})
         self._send_json(pages)
 
     def _serve_page(self, slug: str):
@@ -298,7 +305,19 @@ class GikiHandler(BaseHTTPRequestHandler):
         raw = self.store.read(slug)
         from ..wiki.parser import parse_page
 
-        page = parse_page(raw)
+        try:
+            page = parse_page(raw)
+        except Exception as e:
+            self._send_json({
+                "slug": slug,
+                "title": slug,
+                "body": f"*This page could not be parsed: {e}*\n\n```\n{raw[:500]}\n```",
+                "aliases": [],
+                "tags": [],
+                "links": [],
+            })
+            return
+
         self._send_json({
             "slug": slug,
             "title": page.title,
@@ -322,13 +341,17 @@ class GikiHandler(BaseHTTPRequestHandler):
         nodes = []
         links = []
         for slug in sorted(slugs):
-            raw = self.store.read(slug)
-            page = parse_page(raw)
-            nodes.append({"id": slug, "title": page.title})
-            for lk in page.links:
-                target = lk.target
-                if target in slugs and target != slug:
-                    links.append({"source": slug, "target": target})
+            try:
+                raw = self.store.read(slug)
+                page = parse_page(raw)
+                nodes.append({"id": slug, "title": page.title})
+                for lk in page.links:
+                    target = lk.target
+                    if target in slugs and target != slug:
+                        links.append({"source": slug, "target": target})
+            except Exception:
+                # Skip pages that fail to parse — still add as a node with no links
+                nodes.append({"id": slug, "title": slug})
         self._send_json({"nodes": nodes, "links": links})
 
 
