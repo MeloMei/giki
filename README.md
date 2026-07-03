@@ -10,7 +10,7 @@ Git-native LLM Wiki — compile knowledge like code, review like a PR.
 </p>
 
 <p align="center">
-<a href="docs/README-CN.md">Chinese</a>
+<a href="docs/README-CN.md"> 中文 </a>
 </p>
 
 ---
@@ -25,7 +25,6 @@ Like CI/CD for your knowledge base.
 
 ## See it in action
 
-Let's walk through what using giki actually looks like.
 
 **Starting a new knowledge base:**
 
