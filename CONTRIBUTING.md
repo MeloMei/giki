@@ -56,7 +56,6 @@ src/giki/
   commands/           # CLI command modules (init, ingest, review, config)
   templates/          # Scaffolding templates for `giki init`
 tests/                # pytest suite (flat structure, mirrors src modules)
-docs/superpowers/     # Design specs and implementation plans
 ```
 
 ## Code Style

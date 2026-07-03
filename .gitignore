@@ -10,3 +10,10 @@ dist/
 .idea/
 .DS_Store
 .giki-state/*.json
+
+# Internal docs (plans, specs, design drafts)
+docs/superpowers/
+giki.md
+
+# Dog-fooding wiki (local demo, not shipped)
+kbase/
