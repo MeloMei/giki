@@ -79,6 +79,12 @@ The review bot and the compile engine can use different LLMs — this is intenti
 
 ## Get started
 
+**Using an AI coding assistant?** Paste this to your agent:
+
+> Read https://github.com/MeloMei/giki/blob/main/SETUP.md and set up the giki project for me.
+
+Or install manually:
+
 ```bash
 pip install giki-gitwiki
 ```

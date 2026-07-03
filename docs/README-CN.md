@@ -81,6 +81,12 @@ giki review --base main
 
 ## 开始使用
 
+**用 AI 编程助手？** 把这句话贴给你的 agent：
+
+> 请阅读 https://github.com/MeloMei/giki/blob/main/SETUP.md 并按照里面的步骤帮我把 giki 项目克隆到本地并配置好所有环境。
+
+或手动安装：
+
 ```bash
 pip install giki-gitwiki
 ```
