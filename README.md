@@ -105,7 +105,7 @@ llm:
     api_key_env: OPENAI_API_KEY
 ```
 
-Works with Claude, GPT-4, Ollama, and any OpenAI-compatible endpoint.
+Works with Claude, GPT, Ollama, and any OpenAI-compatible endpoint.
 
 ## Commands
 
@@ -124,7 +124,7 @@ Works with Claude, GPT-4, Ollama, and any OpenAI-compatible endpoint.
 
 ## MCP Server (for QoderWork / Claude Code / Codex)
 
-giki can run as an MCP (Model Context Protocol) server, letting you use it directly inside QoderWork, Claude Code, or any MCP-compatible platform — no LLM API key needed.
+giki can run as an MCP (Model Context Protocol) server, letting you use it directly inside Codex, Claude Code, or any MCP-compatible platform — no LLM API key needed.
 
 ```bash
 pip install giki-gitwiki
