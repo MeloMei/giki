@@ -475,15 +475,10 @@ class Ingester:
         """End-to-end ingest of one source file."""
         source_path = Path(source_path)
 
-        # Open repo first so we can exempt sources before the clean check.
+        # Open repo first.
         repo = open_repo(self.config.root)
 
-        # Exempt the source file from the clean-worktree check when it lives
-        # inside the repo (common for `sources/foo.md`). We do this via the
-        # repo-local `.git/info/exclude` so we do not touch the shared `.gitignore`.
-        _exempt_source_from_git(Path(repo.working_dir), source_path)
-
-        # Now check worktree cleanliness (exemption is in place).
+        # Now check worktree cleanliness (sources/ is exempt in git_utils).
         ensure_clean_worktree(repo)
         if branch:
             checkout_branch(repo, branch, create=True)
@@ -741,33 +736,6 @@ def _format_page(frontmatter: dict, body: str) -> str:
     fm_yaml = yaml.safe_dump(frontmatter, sort_keys=False, allow_unicode=True).rstrip()
     body = body.strip() + "\n"
     return f"---\n{fm_yaml}\n---\n\n{body}"
-
-
-def _exempt_source_from_git(repo_root: Path, source_path: Path) -> None:
-    """Add ``source_path`` (relative to ``repo_root``) to ``.git/info/exclude``.
-
-    No-op when the source lives outside the repo or when it is already listed.
-    Idempotent and side-effect-free otherwise.
-    """
-    try:
-        rel = Path(source_path).resolve().relative_to(Path(repo_root).resolve())
-    except (ValueError, OSError):
-        return
-    rel_posix = rel.as_posix()
-    exclude_path = Path(repo_root) / ".git" / "info" / "exclude"
-    try:
-        exclude_path.parent.mkdir(parents=True, exist_ok=True)
-    except OSError:
-        return
-    existing = exclude_path.read_text(encoding="utf-8") if exclude_path.exists() else ""
-    lines = [ln.strip() for ln in existing.splitlines()]
-    if rel_posix in lines:
-        return
-    new_text = existing
-    if new_text and not new_text.endswith("\n"):
-        new_text += "\n"
-    new_text += rel_posix + "\n"
-    exclude_path.write_text(new_text, encoding="utf-8")
 
 
 def _build_full_page_index(store: WikiStore) -> str:

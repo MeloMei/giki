@@ -254,7 +254,9 @@ class TestCommit:
 class TestFullIngest:
     def test_end_to_end_ingest(self, tmp_path):
         cfg = _init_giki(tmp_path)
-        src_path = tmp_path / "src.md"
+        sources_dir = tmp_path / "sources"
+        sources_dir.mkdir(exist_ok=True)
+        src_path = sources_dir / "src.md"
         src_path.write_text("Some content about observer pattern.", encoding="utf-8")
 
         analyze_resp = json.dumps({
@@ -295,7 +297,9 @@ class TestFullIngest:
 
     def test_ingest_hash_short_circuit(self, tmp_path):
         cfg = _init_giki(tmp_path)
-        src_path = tmp_path / "src.md"
+        sources_dir = tmp_path / "sources"
+        sources_dir.mkdir(exist_ok=True)
+        src_path = sources_dir / "src.md"
         src_path.write_text("stable content", encoding="utf-8")
 
         # First run: analyze + synth + crosslink
@@ -320,7 +324,9 @@ class TestFullIngest:
 
     def test_ingest_dry_run_no_commit(self, tmp_path):
         cfg = _init_giki(tmp_path)
-        src_path = tmp_path / "src.md"
+        sources_dir = tmp_path / "sources"
+        sources_dir.mkdir(exist_ok=True)
+        src_path = sources_dir / "src.md"
         src_path.write_text("content", encoding="utf-8")
 
         llm = FakeLLM([json.dumps({

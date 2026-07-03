@@ -126,6 +126,14 @@ def init_command(
             "action.yml", root / ".github" / "workflows" / "giki-review.yml"
         )
 
+    # Auto-commit scaffold files so the worktree is clean for immediate ingest.
+    repo = git.Repo(str(root))
+    untracked = [p for p in repo.untracked_files if not p.startswith(".giki-state")]
+    if untracked:
+        repo.index.add(untracked)
+        repo.index.commit("init: scaffold giki knowledge base")
+        success("committed scaffold files")
+
     console.print()
     print_panel(
         "1. Edit [bold].giki/config.yaml[/bold] (LLM provider, model)\n"

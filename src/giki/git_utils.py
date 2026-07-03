@@ -41,14 +41,19 @@ def ensure_clean_worktree(repo: git.Repo) -> None:
 
 
 def _relevant_untracked(repo: git.Repo) -> list[str]:
-    """Untracked files, ignoring `.giki-state/*` at any depth."""
+    """Untracked files, ignoring `.giki-state/*` and `sources/*` at any depth.
+
+    `.giki-state/` contains regeneratable state.
+    `sources/` contains user input documents that are expected to exist
+    as untracked files before ingest.
+    """
+    _EXEMPT_PREFIXES = (".giki-state/", ".giki-state\\", "sources/", "sources\\")
+    _EXEMPT_INFIXS = ("/.giki-state/", "\\.giki-state\\", "/sources/", "\\sources\\")
     return [
         p for p in repo.untracked_files
         if not (
-            p.startswith(".giki-state/")
-            or p.startswith(".giki-state\\")
-            or "/.giki-state/" in p
-            or "\\.giki-state\\" in p
+            any(p.startswith(pre) for pre in _EXEMPT_PREFIXES)
+            or any(inf in p for inf in _EXEMPT_INFIXS)
         )
     ]
 
