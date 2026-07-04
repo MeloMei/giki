@@ -189,7 +189,9 @@ def create_server() -> FastMCP:
             check_frontmatter,
             check_index_sync,
             check_unrelated_edits,
+            cross_page_analysis,
             review_page_semantic,
+            summarize_neighbors,
         )
         from giki.wiki.review_fmt import format_json, format_markdown
 
@@ -266,6 +268,7 @@ def create_server() -> FastMCP:
 
             # Build LLM client for semantic review
             review_client = build_client(config.llm.review)
+            changed_pages: list[tuple[str, str]] = []
 
             for change in wiki_changes:
                 slug = change.wiki_slug
@@ -294,13 +297,16 @@ def create_server() -> FastMCP:
                     except Exception:
                         pass
 
+                # Build neighbors context from linked pages
+                neighbors = summarize_neighbors(wiki_dir, slug)
+
                 findings, _verdict = review_page_semantic(
                     llm=review_client,
                     rules=rules,
                     page_slug=slug,
                     page_before=before_text,
                     page_after=after_text,
-                    neighbors_summary="(none)",
+                    neighbors_summary=neighbors,
                     mechanical_findings_text=mech_text,
                     is_hand_written=is_hand_written,
                 )
@@ -310,6 +316,19 @@ def create_server() -> FastMCP:
                     pages_skipped += 1
                 else:
                     pages_reviewed += 1
+
+                # Collect page content for cross-page analysis
+                if after_text and not is_hand_written:
+                    changed_pages.append((slug, after_text))
+
+            # Cross-page analysis: contradictions and semantic overlap
+            if len(changed_pages) >= 2:
+                cross_findings = cross_page_analysis(
+                    llm=review_client,
+                    pages=changed_pages,
+                    rules=rules,
+                )
+                all_findings.extend(cross_findings)
 
             # Aggregate verdict
             verdict = aggregate_verdict(

@@ -1,5 +1,10 @@
 Review the following wiki page change against the wiki rules.
 
+Pay special attention to:
+- Contradictions with neighboring pages (check the Neighboring pages section)
+- Factual claims that conflict with linked content
+- Missing cross-references to related pages
+
 ## Wiki Rules
 {{ rules_text }}
 

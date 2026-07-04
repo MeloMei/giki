@@ -59,8 +59,8 @@ giki review --base main
 
 This is where giki earns its keep. The review bot runs two phases:
 
-1. **Mechanical checks** — dead links, frontmatter format, index sync, slug validation. Zero false positives. These are the checks a linter would catch.
-2. **Semantic review** — LLM reads each changed page, evaluates it against your `wiki-rules.md`, and cites specific rules by anchor. Catches contradictions between pages, missing citations, scope violations.
+1. **Mechanical checks** — dead links, frontmatter format, index sync, slug validation, typed wikilink validation. Zero false positives. These are the checks a linter would catch.
+2. **Semantic review** — per-page LLM analysis against your `wiki-rules.md`, with context from neighboring pages (linked via wikilinks). Then cross-page analysis across all changed pages to detect contradictions and semantic overlap. Cites specific rules by anchor.
 
 Verdicts are `approve`, `comment`, or `request-changes`. The review bot and the compile engine can use different LLMs — this is intentional. Cross-model validation catches hallucinations that a single model might miss.
 

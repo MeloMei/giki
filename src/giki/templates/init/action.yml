@@ -1,3 +1,12 @@
+# giki review — auto-review wiki changes on every PR
+#
+# Required secrets:
+#   ANTHROPIC_API_KEY (or OPENAI_API_KEY, depending on your .giki/config.yaml)
+#
+# The review bot runs mechanical checks (dead links, frontmatter, index sync)
+# plus LLM semantic review (per-page + cross-page contradiction/overlap detection)
+# and posts the results as a PR comment.
+
 name: giki review
 on:
   pull_request:
@@ -5,13 +14,17 @@ on:
 jobs:
   review:
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
       - uses: actions/setup-python@v5
         with: { python-version: '3.11' }
-      - run: pip install giki
-      - run: giki review --pr ${{ github.event.pull_request.number }} --post
+      - run: pip install giki-gitwiki
+      - name: Run giki review
+        run: giki review --pr ${{ github.event.pull_request.number }} --post --json
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

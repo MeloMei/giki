@@ -226,6 +226,52 @@ def check_typed_links(
 
     return findings
 
+
+def summarize_neighbors(
+    wiki_dir: Path, slug: str, *, max_pages: int = 5, max_chars: int = 300
+) -> str:
+    """Build a brief summary of pages linked from *slug* for review context.
+
+    Reads the page's wikilinks, loads each target page, and extracts its
+    title plus the first *max_chars* of body text.  Returns a formatted
+    string suitable for injection into the review prompt.
+    """
+    page_path = wiki_dir / f"{slug}.md"
+    if not page_path.exists():
+        return ""
+
+    try:
+        page = parse_page(page_path.read_text(encoding="utf-8"))
+    except ParseError:
+        return ""
+
+    seen: set[str] = set()
+    summaries: list[str] = []
+    for link in page.links:
+        target = link.target
+        if target in seen or target == slug:
+            continue
+        seen.add(target)
+        target_path = wiki_dir / f"{target}.md"
+        if not target_path.exists():
+            continue
+        try:
+            tp = parse_page(target_path.read_text(encoding="utf-8"))
+        except ParseError:
+            continue
+        # First paragraph of body (skip blank lines)
+        body_lines = [
+            ln for ln in tp.body.splitlines() if ln.strip()
+        ]
+        snippet = "\n".join(body_lines)[:max_chars]
+        relation = f" ({link.link_type})" if link.link_type else ""
+        summaries.append(f"### {tp.title} [[{target}]]{relation}\n{snippet}")
+        if len(summaries) >= max_pages:
+            break
+
+    return "\n\n".join(summaries)
+
+
 # --- Semantic Review (Phase 3) ---
 
 
@@ -322,6 +368,98 @@ def review_page_semantic(
         verdict = "comment"
 
     return findings, verdict
+
+
+def cross_page_analysis(
+    *,
+    llm: LLMAdapter,
+    pages: list[tuple[str, str]],
+    rules: list,
+) -> list[SemanticFinding]:
+    """Detect contradictions and semantic overlaps across changed pages.
+
+    Args:
+        llm: The LLM adapter to use.
+        pages: List of (slug, content) tuples for changed pages.
+        rules: Parsed wiki rules.
+
+    Returns:
+        List of SemanticFinding for cross-page issues.
+    """
+    if len(pages) < 2:
+        return []
+
+    # Build page summaries for the prompt
+    page_summaries: list[str] = []
+    for slug, content in pages:
+        # Use first 500 chars of each page
+        snippet = content[:500].strip()
+        page_summaries.append(f"### Page: {slug}\n{snippet}")
+
+    pages_text = "\n\n---\n\n".join(page_summaries)
+
+    if rules:
+        rules_text = "\n".join(
+            f"- {r.anchor}: {r.name}" for r in rules
+        )
+    else:
+        rules_text = "(no rules configured)"
+
+    prompt = (
+        "You are reviewing multiple wiki pages that were changed together. "
+        "Look for cross-page issues only — do NOT review individual page quality.\n\n"
+        f"## Wiki Rules (for reference)\n{rules_text}\n\n"
+        f"## Changed Pages\n\n{pages_text}\n\n"
+        "Check for:\n"
+        "1. **Contradictions**: Pages making conflicting factual claims about "
+        "the same topic (e.g., page A says X is deprecated, page B says X is "
+        "recommended).\n"
+        "2. **Semantic overlap**: Pages covering substantially the same content "
+        "that should be merged or differentiated.\n\n"
+        "Output ONLY valid JSON:\n"
+        '{\n  "findings": [\n    {\n'
+        '      "rule_id": "cross-contradiction" | "cross-overlap",\n'
+        '      "severity": "blocker" | "warn",\n'
+        '      "evidence": "describe the cross-page issue",\n'
+        '      "suggestion": "how to resolve it",\n'
+        '      "page_slug": "primary page slug"\n'
+        "    }\n  ]\n}\n"
+        "If no cross-page issues, return {\"findings\": []}."
+    )
+
+    system_prompt = (
+        "You are a wiki quality reviewer. Focus ONLY on cross-page issues: "
+        "contradictions and content overlap. Be precise and cite specific text."
+    )
+    messages = [
+        Message(role="system", content=system_prompt),
+        Message(role="user", content=prompt),
+    ]
+
+    try:
+        response = llm.chat(messages)
+        data = extract_json(response.text)
+    except (ValueError, Exception):
+        return []
+
+    if not isinstance(data, dict):
+        return []
+
+    findings: list[SemanticFinding] = []
+    for f in data.get("findings", []):
+        if not isinstance(f, dict):
+            continue
+        findings.append(
+            SemanticFinding(
+                rule_id=str(f.get("rule_id", "cross-page")),
+                severity=str(f.get("severity", "warn")),
+                evidence=str(f.get("evidence", "")),
+                suggestion=str(f.get("suggestion", "")),
+                page_slug=str(f.get("page_slug", "")) or None,
+            )
+        )
+
+    return findings
 
 
 # --- Aggregation (Phase 4) ---

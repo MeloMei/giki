@@ -53,6 +53,10 @@ class MechanicalFinding:
     message: str
     page_slug: str | None = None
 
+    @property
+    def finding_type(self) -> str:
+        return "mechanical"
+
     def to_semantic(self) -> "SemanticFinding":
         return SemanticFinding(
             rule_id=self.rule_id,
@@ -70,6 +74,10 @@ class SemanticFinding:
     evidence: str
     suggestion: str
     page_slug: str | None = None
+
+    @property
+    def finding_type(self) -> str:
+        return "semantic"
 
 
 @dataclass(frozen=True)
