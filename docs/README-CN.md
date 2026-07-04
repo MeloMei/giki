@@ -1,6 +1,6 @@
 # giki
 
-Git 驱动的 LLM Wiki -- 像管理代码一样管理知识。
+知识库的 CI/CD。
 
 <p align="center">
 <a href="https://github.com/MeloMei/giki/actions/workflows/ci.yml"><img src="https://github.com/MeloMei/giki/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -14,17 +14,14 @@ Git 驱动的 LLM Wiki -- 像管理代码一样管理知识。
 </p>
 
 ---
-Andrej Kaparthy 提出的 LLM WIKI 已经成为知识管理新范式，让知识库建设从基于向量的 RAG 变成了大模型自己驱动的知识编译
-但是，团队知识库需要安全的共建和标准的质量门禁
 
-如果把文档丢给 LLM，它吐出 wiki 页面。但是到此为止，拿到一堆 markdown，却没办法防范低质量知识注入，没办法让团队协作维护，出了问题也没有追溯记录。
+你的代码有 CI/CD —— 每次 push 都会跑 lint、测试、review，没问题才能合并进 main。你的知识库也应该有同样的待遇。
 
-giki 取名源自 git wiki 
-把软件工程的 git 管理放进知识库建设，把知识当代码来管。
+大多数 LLM wiki 工具到生成 markdown 就停了。把文档丢给大模型，它吐出 wiki 页面，完事。但你拿到的是一堆没人把关的内容——没有质量检查，没有审计记录，页面之间的矛盾发现不了，幻觉出来的事实也没人挡。团队越依赖这个知识库，风险越大。
 
-每次 AI 修改都是一条可回滚可审计的 git commit。
-团队在分支上工作，通过 PR 合并。
-一个像 github 自动审查的机制会在任何改动进入主干之前，检查断链、语义矛盾和规则违规，就像知识库的 CI/CD
+giki 把知识当代码管。它通过 LLM 流水线把文档编译成结构化的 wiki 页面，然后对每一次变更跑自动化质量门禁——机械检查零误报，语义审查能抓矛盾、违规和断链。一切都是 git-native 的：每次修改都是一条可回滚、可审计的 commit。
+
+名字来自 "git wiki"。如果说 Karpathy 的 LLM Wiki 定义了编译步骤，giki 加的就是 CI/CD。
 
 
 ## 功能演示
@@ -38,11 +35,11 @@ giki init
 
 <p align="center"><img src="screenshots/init-demo.png" alt="giki init 输出" width="650"></p>
 
-这会帮你建好目录结构：配置文件、审查规则、空的 `wiki/` 和 `sources/` 目录，还有自动维护的索引和日志。
+这会帮你建好目录结构：配置文件、审查规则（`wiki-rules.md`）、空的 `wiki/` 和 `sources/` 目录，还有自动维护的索引和日志。所有文件自动提交。
 
 **把一篇文档编译成 wiki 页面：**
 
-把 markdown 文件（或 PDF）丢进 `sources/`，然后运行：
+把 markdown 文件或 PDF 丢进 `sources/`，然后运行：
 
 ```bash
 giki ingest sources/design-patterns.md --branch wiki/design-patterns --yes
@@ -50,7 +47,7 @@ giki ingest sources/design-patterns.md --branch wiki/design-patterns --yes
 
 <p align="center"><img src="screenshots/ingest-demo.png" alt="giki ingest 输出" width="650"></p>
 
-giki 会分析源文档，提议候选页面，通过 LLM 生成内容，在相关概念之间添加双向链接，更新索引，然后把所有改动提交到一个分支上。整个流水线分三步：分析、综合、关联。滑动窗口分片意味着长文档也能完整处理，不会被截断。
+giki 会分析源文档，提议候选页面，通过 LLM 生成结构化内容，在相关概念之间添加双向链接，更新索引，然后把所有改动提交到一个分支上。整个流水线分三步：分析、综合、关联。滑动窗口分片意味着长文档也能完整处理。
 
 **合并之前审查改动：**
 
@@ -60,47 +57,29 @@ giki review --base main
 
 <p align="center"><img src="screenshots/review-demo.png" alt="giki review 输出" width="650"></p>
 
-审查机器人先跑机械检查（断链、frontmatter 格式、索引同步）——这些检查零误报。然后逐页做语义审查，对照你的 `wiki-rules.md` 规则逐条评估。结论分三种：`approve`（通过）、`comment`（建议）、`request-changes`（驳回）。
+这是 giki 真正值钱的地方。审查机器人跑两阶段：
+
+1. **机械检查** —— 断链、frontmatter 格式、索引同步、slug 规范。零误报。相当于 linter 能抓到的问题。
+2. **语义审查** —— LLM 逐页读变更，对照你的 `wiki-rules.md` 规则评估，cite 具体规则锚点。能抓页面间的事实矛盾、缺失引用、超出范围的内容。
+
+结论分三种：`approve`（通过）、`comment`（建议）、`request-changes`（驳回）。审查机器人和编译引擎可以用不同的 LLM——这是刻意设计的。跨模型交叉验证能发现单一模型可能遗漏的幻觉。
 
 **在 Obsidian 里浏览结果：**
 
-把 Obsidian 指向 `wiki/` 目录，立刻获得完整的图谱视图、反向链接和本地搜索。不需要导出。
+把 Obsidian 指向 `wiki/` 目录，立刻获得完整的图谱视图、反向链接和本地搜索。不需要导出——giki 的 wiki 页面就是标准的 markdown + YAML frontmatter。
 
 <p align="center"><img src="screenshots/obsidian-graph.png" alt="Obsidian 图谱视图" width="650"></p>
 
-**启动本地 Web UI：**
-
-```bash
-giki serve
-```
-
-<p align="center"><img src="screenshots/serve-ui.png" alt="giki serve Web UI" width="650"></p>
-
-D3 知识图谱可视化、全文搜索、Markdown 页面查看器——全在浏览器 `localhost:8080`。纯 Python stdlib，无额外依赖。
-
-**向知识库提问：**
-
-```bash
-giki chat "观察者模式有什么应用场景？"
-```
-
-<p align="center"><img src="screenshots/chat.png" alt="giki chat 问答" width="650"></p>
-
-BM25 检索相关页面，LLM 基于 wiki 内容生成回答。
-
 ## 工作原理
-
-核心流程：
 
 1. 原始文档放进 `sources/`
 2. giki 的 LLM 引擎提取概念，生成结构化的 wiki 页面
 3. 自动在相关页面之间添加双向链接
 4. `index.md`（分类目录）和 `log.md`（时间线）自动更新
 5. 所有改动提交为一条干净的 git commit
-6. 开 PR 时，审查机器人检查有没有问题
-7. 团队讨论、改进、合并
+6. 准备好了就跑 `giki review`，合并之前检查有没有问题
 
-审查机器人和编译引擎可以用不同的 LLM——这是刻意设计的。跨模型交叉验证能发现单一模型可能遗漏的幻觉。
+整个东西就是一个 git 仓库。版本历史、分支、审计记录天然就有——没有私有数据库，没有供应商锁定。你的知识库是可移植、可 diff 的。
 
 ## 开始使用
 
@@ -138,18 +117,14 @@ llm:
 |---|---|
 | `giki init [--with-action]` | 初始化知识库。加 `--with-action` 会生成 GitHub Actions 自动审查。 |
 | `giki ingest <path...> [--branch NAME] [--yes]` | 把源文档编译成 wiki 页面。 |
-| `giki review [--pr N] [--post] [--json]` | 跑机械检查 + 语义审查。 |
-| `giki branch list \| create \| switch` | 管理知识编译分支。 |
-| `giki pr create \| list \| review \| merge` | 管理 Pull Request（需要 gh CLI）。 |
+| `giki review [--base BRANCH] [--pr N] [--json]` | 两阶段审查：机械检查 + LLM 语义分析。 |
 | `giki lint [--fix]` | 检查 wiki 健康：断链、孤立页、frontmatter 问题。`--fix` 自动修复。 |
-| `giki serve [--port N]` | 启动本地 Web UI，含 D3 知识图谱和搜索。 |
-| `giki chat ["问题"]` | 向知识库提问。BM25 检索 + LLM RAG。 |
-| `giki config show \| set <key> <value>` | 管理配置。 |
+| `giki config show \| set <key> <value>` | 查看或修改配置。 |
 | `giki mcp-serve` | 启动 MCP 服务器，供平台集成。 |
 
-## MCP 服务器（Claude Code / Codex）
+## MCP 服务器
 
-giki 可以作为 MCP（Model Context Protocol）服务器运行，让你直接在 Codex、Claude Code 或任何 MCP 兼容平台里使用——不需要自己的 LLM API key。
+giki 可以作为 MCP（Model Context Protocol）服务器运行，让你直接在 Claude Code、QoderWork、Codex 或任何 MCP 兼容平台里使用。平台内置的 LLM 驱动 giki 的流水线——不需要单独配 API key。
 
 ```bash
 pip install giki-gitwiki
@@ -168,7 +143,7 @@ pip install giki-gitwiki
 }
 ```
 
-重启平台后，就可以让平台初始化知识库、导入文档、审查改动——平台内置的 LLM 会驱动 giki 的流水线。
+重启后，让平台初始化知识库、导入文档、审查改动就行。
 
 ## 贡献
 

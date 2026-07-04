@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 import re
 from pathlib import Path
 from unittest.mock import patch
@@ -33,13 +32,8 @@ class TestTopLevelHelp:
         result = runner.invoke(app, ["--help"])
         assert result.exit_code == 0, result.output
         out = _ANSI_RE.sub("", result.stdout)
-        for name in ("init", "ingest", "config", "review", "mcp-serve", "branch", "pr", "serve", "chat", "lint"):
+        for name in ("init", "ingest", "config", "review", "lint", "mcp-serve"):
             assert name in out, f"expected {name!r} in help output:\n{out}"
-        for name in ("merge", "collab", "fusion"):
-            # word-boundary match so unrelated words like 'preserve' don't trigger
-            assert not re.search(rf"\b{name}\b", out), (
-                f"did not expect standalone {name!r} in v0.1 help:\n{out}"
-            )
 
 
 class TestVersionFlag:
@@ -122,19 +116,3 @@ class TestIngestDelegation:
             "1 source(s) processed" in result.stdout
             and "0 page(s) created" in result.stdout
         )
-
-
-# ---------------------------------------------------------------------------
-# Stub modules — parametrized
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "mod_name",
-    ["merge", "collab", "fusion"],
-)
-def test_stub_modules_raise_notimplementederror(mod_name: str) -> None:
-    mod = importlib.import_module(f"giki.commands.{mod_name}")
-    assert callable(mod.app), f"expected {mod_name}.app to be callable"
-    with pytest.raises(NotImplementedError):
-        mod.app()

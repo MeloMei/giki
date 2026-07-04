@@ -1,6 +1,6 @@
 # giki
 
-Git-native LLM Wiki — compile knowledge like code, review like a PR.
+CI/CD for your knowledge base.
 
 <p align="center">
 <a href="https://github.com/MeloMei/giki/actions/workflows/ci.yml"><img src="https://github.com/MeloMei/giki/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -15,19 +15,18 @@ Git-native LLM Wiki — compile knowledge like code, review like a PR.
 
 ---
 
-Andrej Karpathy's LLM Wiki has become the new paradigm for knowledge management — shifting knowledge base construction from vector-based RAG to LLM-driven knowledge compilation. But team knowledge bases still need safe collaboration and proper quality gates.
+Your code has CI/CD — every push triggers lint, tests, and review before anything lands in main. Your knowledge base deserves the same treatment.
 
-Feed documents to an LLM, and it spits out wiki pages. That's where most tools stop — you end up with a pile of markdown, no defense against low-quality knowledge injection, no way for your team to collaborate on it, and no audit trail when things go wrong.
+Most LLM wiki tools stop at generating markdown. You feed a document to an LLM, it spits out wiki pages, done. But you end up with a pile of unguarded content — no quality checks, no audit trail, no way to catch contradictions between pages, no protection against hallucinated facts. The more your team relies on it, the more dangerous it gets.
 
-The name giki comes from "git wiki." It brings software engineering's git workflow into knowledge base construction, treating knowledge like code. Every AI modification is a revertable, auditable git commit. Teams work on branches and merge through pull requests. A GitHub-auto-review-like mechanism checks for dead links, semantic contradictions, and rule violations before anything lands in main.
+giki treats knowledge like code. It compiles documents into structured wiki pages through an LLM pipeline, then runs automated quality gates on every change — mechanical checks with zero false positives, plus semantic review that catches contradictions, rule violations, and dead links. Everything is git-native: every modification is a revertable, auditable commit.
 
-Like CI/CD for your knowledge base.
+The name comes from "git wiki." If Karpathy's LLM Wiki defined the compile step, giki adds the CI/CD.
 
 
 ## See it in action
 
-
-**Starting a new knowledge base:**
+**Start a knowledge base:**
 
 ```bash
 mkdir my-kb && cd my-kb && git init
@@ -36,11 +35,11 @@ giki init
 
 <p align="center"><img src="docs/screenshots/init-demo.png" alt="giki init output" width="650"></p>
 
-That scaffolds your directory with a config file, wiki-rules for the review bot, empty `wiki/` and `sources/` directories, and auto-maintained index and log files.
+This scaffolds your directory with a config file, review rules (`wiki-rules.md`), empty `wiki/` and `sources/` directories, and auto-maintained index and log files. Everything gets committed automatically.
 
-**Compiling a document into wiki pages:**
+**Compile a document into wiki pages:**
 
-Drop a markdown file (or PDF) into `sources/` and run:
+Drop a markdown file or PDF into `sources/` and run:
 
 ```bash
 giki ingest sources/design-patterns.md --branch wiki/design-patterns --yes
@@ -48,9 +47,9 @@ giki ingest sources/design-patterns.md --branch wiki/design-patterns --yes
 
 <p align="center"><img src="docs/screenshots/ingest-demo.png" alt="giki ingest output" width="650"></p>
 
-giki analyzes the source, proposes candidate pages, generates them through your LLM, adds wikilinks between related concepts, updates the index, and commits everything to a branch. The whole pipeline runs in three phases: analyze, synthesize, crosslink. Sliding-window chunking means even long documents work without truncation.
+giki analyzes the source, proposes candidate pages, generates structured wiki content through your LLM, adds wikilinks between related concepts, updates the index, and commits everything to a branch. The pipeline runs in three phases: analyze, synthesize, crosslink. Sliding-window chunking means even long documents work without truncation.
 
-**Reviewing changes before they merge:**
+**Review changes before they merge:**
 
 ```bash
 giki review --base main
@@ -58,47 +57,29 @@ giki review --base main
 
 <p align="center"><img src="docs/screenshots/review-demo.png" alt="giki review output" width="650"></p>
 
-The review bot runs mechanical checks first (dead links, frontmatter format, index sync) — zero false positives on these. Then it does per-page semantic review against your `wiki-rules.md`, citing specific rules by anchor. Verdicts are `approve`, `comment`, or `request-changes`.
+This is where giki earns its keep. The review bot runs two phases:
+
+1. **Mechanical checks** — dead links, frontmatter format, index sync, slug validation. Zero false positives. These are the checks a linter would catch.
+2. **Semantic review** — LLM reads each changed page, evaluates it against your `wiki-rules.md`, and cites specific rules by anchor. Catches contradictions between pages, missing citations, scope violations.
+
+Verdicts are `approve`, `comment`, or `request-changes`. The review bot and the compile engine can use different LLMs — this is intentional. Cross-model validation catches hallucinations that a single model might miss.
 
 **Browse the result in Obsidian:**
 
-Point Obsidian at your `wiki/` directory and you get the full graph view with backlinks, local search, and wikilink navigation. No export needed.
+Point Obsidian at your `wiki/` directory and you get the full graph view with backlinks, local search, and wikilink navigation. No export needed — giki's wiki pages are just standard markdown with YAML frontmatter.
 
 <p align="center"><img src="docs/screenshots/obsidian-graph.png" alt="Obsidian graph view" width="650"></p>
 
-**Launch a local web UI:**
-
-```bash
-giki serve
-```
-
-<p align="center"><img src="docs/screenshots/serve-ui.png" alt="giki serve web UI" width="650"></p>
-
-D3 knowledge graph visualization, full-text search, and a markdown page viewer — all in your browser at `localhost:8080`. No dependencies, pure Python stdlib.
-
-**Ask your knowledge base questions:**
-
-```bash
-giki chat "观察者模式有什么应用场景？"
-```
-
-<p align="center"><img src="docs/screenshots/chat.png" alt="giki chat Q&A" width="650"></p>
-
-BM25 retrieves relevant pages, then the LLM generates an answer grounded in your wiki content.
-
 ## How it works
-
-The core loop:
 
 1. Raw documents go into `sources/`
 2. giki's LLM engine extracts concepts and generates structured wiki pages
 3. Crosslinks are added between related pages automatically
 4. `index.md` (categorized directory) and `log.md` (timeline) update themselves
 5. Everything gets committed as a clean git commit
-6. When you open a PR, the review bot checks for problems
-7. Your team discusses, refines, and merges
+6. When you're ready, `giki review` checks for problems before anything merges to main
 
-The review bot and the compile engine can use different LLMs — this is intentional. Cross-model validation catches hallucinations that a single model might miss.
+The whole thing is a git repo. You get version history, branching, and audit trails for free — no proprietary database, no vendor lock-in. Your knowledge base is portable and diffable.
 
 ## Get started
 
@@ -134,26 +115,22 @@ Works with Claude, GPT, Ollama, and any OpenAI-compatible endpoint.
 
 | Command | What it does |
 |---|---|
-| `giki init [--with-action]` | Set up a knowledge base. Add `--with-action` for GitHub Actions auto-review. |
-| `giki ingest <path...> [--branch NAME] [--yes]` | Compile sources into wiki pages. |
-| `giki review [--pr N] [--post] [--json]` | Run mechanical + semantic review. |
-| `giki branch list \| create \| switch` | Manage branches for knowledge compilation. |
-| `giki pr create \| list \| review \| merge` | Manage pull requests (requires gh CLI). |
+| `giki init [--with-action]` | Scaffold a knowledge base. Add `--with-action` for GitHub Actions auto-review on PR. |
+| `giki ingest <path...> [--branch NAME] [--yes]` | Compile source documents into wiki pages. |
+| `giki review [--base BRANCH] [--pr N] [--json]` | Run two-phase review: mechanical checks + LLM semantic analysis. |
 | `giki lint [--fix]` | Check wiki health: dead links, orphans, frontmatter issues. `--fix` auto-repairs. |
-| `giki serve [--port N]` | Start local web UI with D3 knowledge graph and search. |
-| `giki chat ["question"]` | Ask your knowledge base questions. BM25 retrieval + LLM RAG. |
-| `giki config show \| set <key> <value>` | Manage config. |
+| `giki config show \| set <key> <value>` | View or update config. |
 | `giki mcp-serve` | Start MCP server for platform integration. |
 
-## MCP Server (for Claude Code / Codex)
+## MCP Server
 
-giki can run as an MCP (Model Context Protocol) server, letting you use it directly inside Codex, Claude Code, or any MCP-compatible platform — no LLM API key needed.
+giki runs as an MCP (Model Context Protocol) server, letting you use it directly inside Claude Code, QoderWork, Codex, or any MCP-compatible platform. The platform's built-in LLM drives giki's pipeline — no separate API key needed.
 
 ```bash
 pip install giki-gitwiki
 ```
 
-Then add to your platform's MCP config:
+Add to your platform's MCP config:
 
 ```json
 {
@@ -166,7 +143,7 @@ Then add to your platform's MCP config:
 }
 ```
 
-After restarting the platform, you can ask it to initialize a knowledge base, ingest documents, or review changes — the platform's built-in LLM will drive giki's pipeline.
+After restarting, ask the platform to initialize a knowledge base, ingest documents, or review changes. It handles the rest.
 
 ## Contributing
 

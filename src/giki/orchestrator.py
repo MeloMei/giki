@@ -19,7 +19,6 @@ from .git_utils import add_and_commit, checkout_branch, open_repo, ensure_clean_
 from .llm import build_client
 from .llm.base import LLMAdapter, LLMError, Message
 from .llm.prompts import PromptTemplate
-from .search import SearchIndex
 from .sources.loader import LoadedSource, load_source
 from .sources.state import SourceState
 from .utils import extract_json, iso_now, to_slug
@@ -414,11 +413,6 @@ class Ingester:
         # Update source state.
         self.state.mark(source.path, source.sha256, pages=list(created) + list(updated))
         self.state.save()
-
-        # Rebuild BM25 search index over all wiki pages.
-        search_index = SearchIndex(self.config.root)
-        search_index.build(self.config.root / "wiki")
-        search_index.save()
 
     # -------- Phase 7: Commit --------
 

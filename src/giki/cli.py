@@ -1,30 +1,24 @@
 """giki CLI entry point.
 
-Registers commands: ``init``, ``ingest``, ``config``, ``review``, ``mcp-serve``,
-``branch``, ``pr``, ``serve``, ``chat``, ``lint``.
-Future command modules (``merge``, ``collab``, ``fusion``) exist as scaffolding
-but are not wired up.
+Registers commands: ``init``, ``ingest``, ``config``, ``review``, ``lint``,
+``mcp-serve``.
 """
 
 from __future__ import annotations
 
 import typer
 
-from .commands.branch import branch_app
-from .commands.chat import chat_command
 from .commands.config_cmd import config_app
 from .commands.ingest import ingest_command
 from .commands.init import init_app
 from .commands.lint import lint_command
-from .commands.pr import pr_app
 from .commands.review import review_command
-from .commands.serve import serve_command
 from .console import show_banner
 
 
 app = typer.Typer(
     no_args_is_help=True,
-    help="giki — LLM Wiki with software-engineering discipline.",
+    help="giki — CI/CD for your knowledge base.",
 )
 
 # `init_app` is a Typer sub-app whose callback IS the init command.
@@ -32,10 +26,6 @@ app.add_typer(init_app, name="init")
 app.command("ingest")(ingest_command)
 app.add_typer(config_app, name="config")
 app.command("review")(review_command)
-app.add_typer(branch_app, name="branch")
-app.add_typer(pr_app, name="pr")
-app.command("serve")(serve_command)
-app.command("chat")(chat_command)
 app.command("lint")(lint_command)
 
 
@@ -75,7 +65,7 @@ def _main(
         help="Show the giki version and exit.",
     ),
 ) -> None:
-    """giki — LLM Wiki with software-engineering discipline."""
+    """giki — CI/CD for your knowledge base."""
     if ctx.invoked_subcommand is None:
         show_banner()
         from .console import console
