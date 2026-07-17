@@ -14,6 +14,41 @@ import git
 from mcp.server.fastmcp import FastMCP
 
 
+def _persist_ledger(usage, state_dir: Path) -> str | None:
+    """Append usage records to the ledger. Returns an error string on failure.
+
+    The ledger is an audit aid — a write failure must never fail the tool
+    call, so OSError is reported back instead of raised.
+    """
+    if not usage.records:
+        return None
+    try:
+        usage.append_ledger(state_dir)
+    except OSError as e:
+        return str(e)
+    return None
+
+
+def _usage_text(usage, ledger_error: str | None = None) -> str:
+    """One-line usage summary for MCP text output (empty when no calls)."""
+    if not usage.records:
+        return ""
+    note = f" (ledger write failed: {ledger_error})" if ledger_error else ""
+    cost, partial = usage.cost_summary()
+    known = any(r.cost_usd is not None for r in usage.records)
+    if not known:
+        cost_text = "n/a (unknown model pricing)"
+    elif partial:
+        cost_text = f">= ${cost:.4f}"
+    else:
+        cost_text = f"${cost:.4f}"
+    return (
+        f"LLM usage: {len(usage.records)} call(s), "
+        f"{usage.total_input:,} tokens in, {usage.total_output:,} tokens out, "
+        f"est. cost {cost_text}{note}"
+    )
+
+
 def create_server() -> FastMCP:
     """Create and return a FastMCP server with giki tool definitions."""
     server = FastMCP("giki")
@@ -106,12 +141,17 @@ def create_server() -> FastMCP:
             Summary with created/updated/failed counts and details per source.
         """
         from giki.config import load_config
+        from giki.llm import build_client
+        from giki.llm.usage import UsageTracker
         from giki.orchestrator import Ingester
 
         try:
             root_path = Path(root).resolve()
             config = load_config(root_path)
             ingester = Ingester(config)
+
+            usage = UsageTracker(command="ingest")
+            llm_client = usage.wrap(lambda: build_client(config.llm.compile))
 
             summaries: list[str] = []
             total_created: list[str] = []
@@ -126,6 +166,7 @@ def create_server() -> FastMCP:
                         branch=branch,
                         yes=yes,
                         dry_run=False,
+                        llm_client=llm_client,
                     )
                     if result.skipped:
                         summaries.append(f"[skip] {p} (already ingested, no changes)")
@@ -151,7 +192,12 @@ def create_server() -> FastMCP:
                 f"{len(total_updated)} updated, "
                 f"{len(total_failed)} failed."
             )
-            return header + "\n" + "\n".join(summaries)
+            output = header + "\n" + "\n".join(summaries)
+            ledger_error = _persist_ledger(usage, config.state_dir)
+            usage_line = _usage_text(usage, ledger_error)
+            if usage_line:
+                output += "\n" + usage_line
+            return output
         except Exception as e:
             return f"error: {e}"
 
@@ -180,6 +226,7 @@ def create_server() -> FastMCP:
         from giki.config import ConfigError, load_config
         from giki.diff import classify_changes, get_diff_changes, get_pr_diff_changes, read_file_at_commit
         from giki.llm import build_client
+        from giki.llm.usage import UsageTracker
         from giki.review_models import ChangeType, MechanicalFinding, ReviewResult, SemanticFinding
         from giki.rules import parse_rules
         from giki.wiki.parser import parse_page
@@ -266,8 +313,9 @@ def create_server() -> FastMCP:
                 else None
             )
 
-            # Build LLM client for semantic review
-            review_client = build_client(config.llm.review)
+            # Build LLM client for semantic review (usage-tracked)
+            usage = UsageTracker(command="review")
+            review_client = usage.wrap(lambda: build_client(config.llm.review))
             changed_pages: list[tuple[str, str]] = []
 
             for change in wiki_changes:
@@ -342,11 +390,19 @@ def create_server() -> FastMCP:
                 pages_skipped=pages_skipped,
             )
 
-            # Output
+            # Output (usage ledger is persisted either way)
+            ledger_error = _persist_ledger(usage, config.state_dir)
             if json_output:
-                return json.dumps(format_json(result), indent=2, ensure_ascii=False)
+                data = format_json(result)
+                if usage.records:
+                    data["usage"] = usage.payload(ledger_error)
+                return json.dumps(data, indent=2, ensure_ascii=False)
             else:
-                return format_markdown(result, collapse_nits=config.review.pr_comment_collapse)
+                md = format_markdown(result, collapse_nits=config.review.pr_comment_collapse)
+                usage_line = _usage_text(usage, ledger_error)
+                if usage_line:
+                    md += "\n\n---\n" + usage_line
+                return md
         except Exception as e:
             return f"error: {e}"
 

@@ -72,7 +72,7 @@ Point Obsidian at your `wiki/` directory and you get the full graph view with ba
 
 **Know what every run costs:**
 
-Every `giki ingest` and `giki review` ends with an LLM usage panel — calls made, tokens in/out, and an estimated cost in USD (built-in list prices; models with unknown pricing show `n/a`, and a partially priced total shows `>= $X` as a lower bound). Each call is also appended to a local ledger at `.giki-state/usage.jsonl`; run `giki usage` anytime for cumulative totals, per-command and per-model breakdowns, and recent runs. Use `giki usage --since 2026-07-01` to answer "how much did I spend this month" (or `--since 30d` for a rolling window), and `--json` for CI budget checks and scripted reports.
+Every `giki ingest` and `giki review` ends with an LLM usage panel — calls made, tokens in/out, and an estimated cost in USD (built-in list prices; models with unknown pricing show `n/a`, and a partially priced total shows `>= $X` as a lower bound). Each call is also appended to a local ledger at `.giki-state/usage.jsonl` — calls made through the MCP tools (`giki_ingest` / `giki_review`) are tracked the same way. Run `giki usage` anytime for cumulative totals, per-command and per-model breakdowns, and recent runs. Use `giki usage --since 2026-07-01` to answer "how much did I spend this month" (or `--since 30d` for a rolling window), and `--json` for CI budget checks and scripted reports.
 
 ## How it works
 
@@ -129,7 +129,7 @@ Works with Claude, GPT, Ollama, and any OpenAI-compatible endpoint.
 
 ## MCP Server
 
-giki runs as an MCP (Model Context Protocol) server, letting you use it directly inside Claude Code, QoderWork, Codex, or any MCP-compatible platform. The platform's built-in LLM drives giki's pipeline — no separate API key needed.
+giki runs as an MCP (Model Context Protocol) server, letting you use it directly inside Claude Code, QoderWork, Codex, or any MCP-compatible platform. The platform's built-in LLM orchestrates the tool calls, while the pipeline itself runs on the LLM configured in `.giki/config.yaml` — calls are billed to that endpoint and tracked in the same usage ledger.
 
 ```bash
 pip install giki-gitwiki

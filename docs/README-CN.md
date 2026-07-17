@@ -72,7 +72,7 @@ giki review --base main
 
 **清楚每次运行花了多少钱：**
 
-每次 `giki ingest` 和 `giki review` 结束时都会显示 LLM 用量面板——调用次数、输入/输出 token 数、按内置刊例价估算的美元成本（未收录的模型显示 `n/a`；部分模型定价未知时显示 `>= $X` 作为下限）。每次调用还会追加到本地账本 `.giki-state/usage.jsonl`；随时运行 `giki usage` 可以查看累计总量、按命令和按模型的明细，以及最近的运行记录。用 `giki usage --since 2026-07-01` 回答"我这个月花了多少"（或 `--since 30d` 看最近 30 天滚动窗口），加 `--json` 输出机器可读结果，方便 CI 预算检查和脚本化报表。
+每次 `giki ingest` 和 `giki review` 结束时都会显示 LLM 用量面板——调用次数、输入/输出 token 数、按内置刊例价估算的美元成本（未收录的模型显示 `n/a`；部分模型定价未知时显示 `>= $X` 作为下限）。每次调用还会追加到本地账本 `.giki-state/usage.jsonl`——通过 MCP 工具（`giki_ingest` / `giki_review`）发起的调用也会同样入账。随时运行 `giki usage` 可以查看累计总量、按命令和按模型的明细，以及最近的运行记录。用 `giki usage --since 2026-07-01` 回答"我这个月花了多少"（或 `--since 30d` 看最近 30 天滚动窗口），加 `--json` 输出机器可读结果，方便 CI 预算检查和脚本化报表。
 
 ## 工作原理
 
@@ -129,7 +129,7 @@ llm:
 
 ## MCP 服务器
 
-giki 可以作为 MCP（Model Context Protocol）服务器运行，让你直接在 Claude Code、QoderWork、Codex 或任何 MCP 兼容平台里使用。平台内置的 LLM 驱动 giki 的流水线——不需要单独配 API key。
+giki 可以作为 MCP（Model Context Protocol）服务器运行，让你直接在 Claude Code、QoderWork、Codex 或任何 MCP 兼容平台里使用。平台内置的 LLM 负责编排工具调用；流水线实际调用的是你 `.giki/config.yaml` 里配置的 LLM——按该 endpoint 计费，并同样计入用量账本。
 
 ```bash
 pip install giki-gitwiki

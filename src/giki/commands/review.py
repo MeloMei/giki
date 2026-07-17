@@ -220,16 +220,21 @@ def review_command(
     # Only when LLM calls were actually made. The ledger is an audit aid —
     # a write failure must not fail the review.
     ledger = None
+    ledger_error = None
     if usage.records:
         try:
             ledger = usage.append_ledger(cfg.state_dir)
         except OSError as e:
+            ledger_error = str(e)
             _warn(f"could not write usage ledger: {e}")
 
     # Output
     if json_output:
+        data = format_json(result)
+        if usage.records:
+            data["usage"] = usage.payload(ledger_error)
         console.print_json(
-            json_module.dumps(format_json(result), indent=2, ensure_ascii=False)
+            json_module.dumps(data, indent=2, ensure_ascii=False)
         )
     else:
         # Show verdict header

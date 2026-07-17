@@ -382,6 +382,12 @@ class TestReviewCommandUsage:
         assert result.exit_code == 0, result.output
         data = json.loads(result.stdout)  # must remain parseable JSON
         assert data["verdict"] == "approve"
+        # JSON output carries the usage block (aligned with the MCP tool)
+        assert data["usage"]["calls"] == 1
+        assert data["usage"]["input_tokens"] == 1000
+        assert data["usage"]["output_tokens"] == 500
+        assert data["usage"]["cost_usd"] is not None
+        assert data["usage"]["ledger_error"] is None
         # ledger is still written even in JSON mode
         assert (tmp_path / ".giki-state" / "usage.jsonl").exists()
 

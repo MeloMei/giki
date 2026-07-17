@@ -170,6 +170,19 @@ class UsageTracker:
                 total += r.cost_usd
         return total, partial
 
+    def payload(self, ledger_error: str | None = None) -> dict:
+        """Machine-readable usage summary for JSON output and MCP tools."""
+        cost, partial = self.cost_summary()
+        known = any(r.cost_usd is not None for r in self.records)
+        return {
+            "calls": len(self.records),
+            "input_tokens": self.total_input,
+            "output_tokens": self.total_output,
+            "cost_usd": cost if known else None,
+            "partial": partial,
+            "ledger_error": ledger_error,
+        }
+
     def summary_lines(self) -> list[str]:
         """Human-readable lines for the end-of-run usage panel."""
         n = len(self.records)
