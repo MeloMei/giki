@@ -1,7 +1,7 @@
 """giki CLI entry point.
 
 Registers commands: ``init``, ``ingest``, ``config``, ``review``, ``lint``,
-``mcp-serve``.
+``usage``, ``mcp-serve``.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from .commands.ingest import ingest_command
 from .commands.init import init_app
 from .commands.lint import lint_command
 from .commands.review import review_command
+from .commands.usage import usage_command
 from .console import show_banner
 
 
@@ -27,6 +28,7 @@ app.command("ingest")(ingest_command)
 app.add_typer(config_app, name="config")
 app.command("review")(review_command)
 app.command("lint")(lint_command)
+app.command("usage")(usage_command)
 
 
 @app.command("mcp-serve")

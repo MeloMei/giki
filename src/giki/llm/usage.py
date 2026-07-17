@@ -206,6 +206,65 @@ class UsageTracker:
         return path
 
 
+def _as_float(value) -> float | None:
+    """Coerce a cost value to float; anything unexpected becomes None."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _normalize_record(rec: dict) -> dict:
+    """Coerce a raw ledger dict to canonical field types.
+
+    ``read_ledger`` only guarantees a dict per line; hand-edited or
+    externally produced ledgers may carry strings/numbers in the wrong
+    shape. Normalizing here keeps every consumer simple and safe.
+    """
+    rec = dict(rec)
+    rec["input_tokens"] = _as_int(rec.get("input_tokens"))
+    rec["output_tokens"] = _as_int(rec.get("output_tokens"))
+    rec["cost_usd"] = _as_float(rec.get("cost_usd"))
+    return rec
+
+
+def read_ledger(state_dir: Path) -> tuple[list[dict], int]:
+    """Read the usage ledger at ``<state_dir>/usage.jsonl``.
+
+    Returns ``(records, skipped)`` where ``skipped`` counts malformed
+    lines — a partially written or hand-edited ledger must never break
+    reporting. Records are normalized: ``input_tokens``/``output_tokens``
+    are always ints and ``cost_usd`` is a float or None. Returns
+    ``([], 0)`` when no ledger exists yet.
+    """
+    path = state_dir / LEDGER_NAME
+    if not path.exists():
+        return [], 0
+    records: list[dict] = []
+    skipped = 0
+    # utf-8-sig tolerates a BOM (Windows editors often add one).
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            skipped += 1
+            continue
+        if not isinstance(rec, dict):
+            skipped += 1
+            continue
+        records.append(_normalize_record(rec))
+    return records, skipped
+
+
 class _TrackingAdapter(LLMAdapter):
     """Lazy proxy that records token usage for every chat call."""
 
