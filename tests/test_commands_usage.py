@@ -247,3 +247,153 @@ class TestUsageCommand:
         out = _ANSI_RE.sub("", result.stdout)
         assert "ledger span: 2026-07-10 08:00" in out
         assert "2026-07-17 09:30" in out
+
+
+# --- --since / --json ------------------------------------------------------
+
+
+class TestSinceFilter:
+    def test_since_date_filters_older_records(self, runner, tmp_path):
+        _write_ledger(
+            tmp_path / ".giki-state",
+            [
+                _rec(run_id="old-run", ts="2026-07-01T08:00:00+00:00"),
+                _rec(run_id="new-run", ts="2026-07-16T08:00:00+00:00"),
+            ],
+        )
+        result = runner.invoke(
+            app, ["usage", "--root", str(tmp_path), "--since", "2026-07-15"]
+        )
+        assert result.exit_code == 0, result.output
+        out = _ANSI_RE.sub("", result.stdout)
+        assert "1 LLM call(s)" in out
+        assert "since 2026-07-15" in out
+        assert "new-run" in out
+        assert "old-run" not in out
+
+    def test_since_nd_days(self, runner, tmp_path):
+        from datetime import datetime, timedelta, timezone
+
+        old = (datetime.now(timezone.utc) - timedelta(days=40)).isoformat(timespec="seconds")
+        recent = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        _write_ledger(
+            tmp_path / ".giki-state",
+            [_rec(run_id="old-run", ts=old), _rec(run_id="new-run", ts=recent)],
+        )
+        result = runner.invoke(
+            app, ["usage", "--root", str(tmp_path), "--since", "7d"]
+        )
+        assert result.exit_code == 0, result.output
+        out = _ANSI_RE.sub("", result.stdout)
+        assert "1 LLM call(s)" in out
+        assert "new-run" in out
+        assert "old-run" not in out
+
+    def test_since_no_matches(self, runner, tmp_path):
+        _write_ledger(tmp_path / ".giki-state", [_rec(ts="2026-07-01T08:00:00+00:00")])
+        result = runner.invoke(
+            app, ["usage", "--root", str(tmp_path), "--since", "2026-07-15"]
+        )
+        assert result.exit_code == 0, result.output
+        out = _ANSI_RE.sub("", result.stdout)
+        assert "No LLM usage recorded since 2026-07-15" in out
+
+    def test_since_invalid_value_rejected(self, runner, tmp_path):
+        _write_ledger(tmp_path / ".giki-state", [_rec()])
+        result = runner.invoke(
+            app, ["usage", "--root", str(tmp_path), "--since", "next-friday"]
+        )
+        assert result.exit_code != 0
+        out = _ANSI_RE.sub("", result.stdout + (result.stderr or ""))
+        assert "invalid --since value" in out
+
+    def test_since_zero_days_means_today(self, runner, tmp_path):
+        from datetime import datetime, timedelta, timezone
+
+        yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        _write_ledger(
+            tmp_path / ".giki-state",
+            [_rec(run_id="old-run", ts=yesterday), _rec(run_id="new-run", ts=now)],
+        )
+        result = runner.invoke(
+            app, ["usage", "--root", str(tmp_path), "--since", "0d"]
+        )
+        assert result.exit_code == 0, result.output
+        out = _ANSI_RE.sub("", result.stdout)
+        assert "1 LLM call(s)" in out
+        assert "new-run" in out
+
+    def test_since_huge_nd_rejected_cleanly(self, runner, tmp_path):
+        _write_ledger(tmp_path / ".giki-state", [_rec()])
+        result = runner.invoke(
+            app, ["usage", "--root", str(tmp_path), "--since", "9999999d"]
+        )
+        assert result.exit_code != 0
+        out = _ANSI_RE.sub("", result.stdout + (result.stderr or ""))
+        assert "invalid --since value" in out
+
+
+class TestJsonOutput:
+    def test_json_totals_and_groups(self, runner, tmp_path):
+        _write_ledger(
+            tmp_path / ".giki-state",
+            [
+                _rec(tin=1000, tout=500, cost=0.0105),
+                _rec(command="review", run_id="run2", model="gpt-4o",
+                     provider="openai", tin=2000, tout=1000, cost=None),
+            ],
+        )
+        result = runner.invoke(app, ["usage", "--root", str(tmp_path), "--json"])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.stdout)
+        assert data["version"] == 1
+        assert data["total"]["calls"] == 2
+        assert data["total"]["input_tokens"] == 3000
+        assert data["total"]["output_tokens"] == 1500
+        assert data["total"]["cost_usd"] == pytest.approx(0.0105)
+        assert data["total"]["partial"] is True
+        assert data["by_command"]["ingest"]["calls"] == 1
+        assert data["by_model"]["openai:gpt-4o"]["cost_usd"] is None
+        assert data["skipped_lines"] == 0
+        assert data["since"] is None
+        assert data["since_resolved"] is None
+
+    def test_json_composes_with_since(self, runner, tmp_path):
+        _write_ledger(
+            tmp_path / ".giki-state",
+            [
+                _rec(run_id="old", ts="2026-07-01T08:00:00+00:00"),
+                _rec(run_id="new", ts="2026-07-16T08:00:00+00:00"),
+            ],
+        )
+        result = runner.invoke(
+            app,
+            ["usage", "--root", str(tmp_path), "--since", "2026-07-15", "--json"],
+        )
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.stdout)
+        assert data["total"]["calls"] == 1
+        assert data["since"] == "2026-07-15"
+        assert data["since_resolved"] is not None
+        assert data["since_resolved"].startswith("2026-07-15")
+
+    def test_json_stays_pure_with_malformed_lines(self, runner, tmp_path):
+        state = tmp_path / ".giki-state"
+        state.mkdir()
+        (state / "usage.jsonl").write_text(
+            json.dumps(_rec()) + "\ngarbage\n", encoding="utf-8"
+        )
+        result = runner.invoke(app, ["usage", "--root", str(tmp_path), "--json"])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.stdout)  # must remain parseable JSON
+        assert data["total"]["calls"] == 1
+        assert data["skipped_lines"] == 1
+
+    def test_json_empty_ledger_is_valid(self, runner, tmp_path):
+        result = runner.invoke(app, ["usage", "--root", str(tmp_path), "--json"])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.stdout)
+        assert data["total"]["calls"] == 0
+        assert data["total"]["cost_usd"] is None
+        assert data["ledger_span"] is None

@@ -72,7 +72,7 @@ Point Obsidian at your `wiki/` directory and you get the full graph view with ba
 
 **Know what every run costs:**
 
-Every `giki ingest` and `giki review` ends with an LLM usage panel — calls made, tokens in/out, and an estimated cost in USD (built-in list prices; models with unknown pricing show `n/a`, and a partially priced total shows `>= $X` as a lower bound). Each call is also appended to a local ledger at `.giki-state/usage.jsonl`; run `giki usage` anytime for cumulative totals, per-command and per-model breakdowns, and recent runs.
+Every `giki ingest` and `giki review` ends with an LLM usage panel — calls made, tokens in/out, and an estimated cost in USD (built-in list prices; models with unknown pricing show `n/a`, and a partially priced total shows `>= $X` as a lower bound). Each call is also appended to a local ledger at `.giki-state/usage.jsonl`; run `giki usage` anytime for cumulative totals, per-command and per-model breakdowns, and recent runs. Use `giki usage --since 2026-07-01` to answer "how much did I spend this month" (or `--since 30d` for a rolling window), and `--json` for CI budget checks and scripted reports.
 
 ## How it works
 
@@ -123,7 +123,7 @@ Works with Claude, GPT, Ollama, and any OpenAI-compatible endpoint.
 | `giki ingest <path...> [--branch NAME] [--yes]` | Compile source documents into wiki pages. |
 | `giki review [--base BRANCH] [--pr N] [--json]` | Run two-phase review: mechanical checks + LLM semantic analysis. |
 | `giki lint [--fix]` | Check wiki health: dead links, orphans, frontmatter issues. `--fix` auto-repairs. |
-| `giki usage [--root PATH]` | Cumulative LLM usage and estimated cost from the local ledger. |
+| `giki usage [--root PATH] [--since DATE\|Nd] [--json]` | Cumulative LLM usage and estimated cost from the local ledger. |
 | `giki config show \| set <key> <value>` | View or update config. |
 | `giki mcp-serve` | Start MCP server for platform integration. |
 

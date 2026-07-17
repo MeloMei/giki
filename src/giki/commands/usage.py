@@ -7,7 +7,8 @@ recent-run breakdowns.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import json as json_module
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import typer
@@ -32,6 +33,30 @@ def _parse_ts(value) -> datetime:
         return datetime.min.replace(tzinfo=timezone.utc)
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _parse_since(text: str) -> datetime:
+    """Parse a ``--since`` value: ISO date/datetime or ``Nd`` (last N days).
+
+    Dates without a time component mean local midnight of that day.
+    Raises ``typer.BadParameter`` on unparseable input.
+    """
+    text = text.strip()
+    try:
+        if text.endswith("d") and text[:-1].isascii() and text[:-1].isdigit():
+            days = int(text[:-1])
+            now = datetime.now().astimezone()
+            return (now - timedelta(days=days)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+        dt = datetime.fromisoformat(text)
+    except (ValueError, OverflowError):
+        raise typer.BadParameter(
+            f"invalid --since value {text!r} (expected YYYY-MM-DD, ISO datetime, or Nd)"
+        ) from None
+    if dt.tzinfo is None:
+        dt = dt.astimezone()  # interpret naive values as local time
     return dt
 
 
@@ -128,9 +153,60 @@ def _render_recent_runs(records: list[dict], *, limit: int = 5) -> None:
     console.print(table)
 
 
+def _report(records: list[dict]) -> dict:
+    """Build the machine-readable report shared by human and JSON output."""
+    total_in = sum(r["input_tokens"] for r in records)
+    total_out = sum(r["output_tokens"] for r in records)
+    known = [r for r in records if r["cost_usd"] is not None]
+    total_cost = sum(r["cost_usd"] for r in known)
+    by_command = _aggregate(records, lambda r: str(r.get("command") or "?"))
+    by_model = _aggregate(
+        records, lambda r: f"{r.get('provider') or '?'}:{r.get('model') or '?'}"
+    )
+    span = None
+    if records:
+        first = min(records, key=lambda r: _parse_ts(r.get("ts", ""))).get("ts", "")
+        last = max(records, key=lambda r: _parse_ts(r.get("ts", ""))).get("ts", "")
+        span = [str(first), str(last)]
+    return {
+        "total": {
+            "calls": len(records),
+            "input_tokens": total_in,
+            "output_tokens": total_out,
+            "cost_usd": total_cost if known else None,
+            "partial": len(known) < len(records),
+        },
+        "by_command": by_command,
+        "by_model": by_model,
+        "ledger_span": span,
+    }
+
+
+def _jsonable(groups: dict[str, dict]) -> dict[str, dict]:
+    """Convert aggregate buckets to a clean JSON shape (cost None when unknown)."""
+    return {
+        k: {
+            "calls": g["calls"],
+            "input_tokens": g["tin"],
+            "output_tokens": g["tout"],
+            "cost_usd": g["cost"] if g["known"] else None,
+            "partial": g["partial"],
+        }
+        for k, g in groups.items()
+    }
+
+
 def usage_command(
     root: Path = typer.Option(
         Path("."), "--root", help="Knowledge base root directory"
+    ),
+    since: str | None = typer.Option(
+        None,
+        "--since",
+        help="Only include calls on/after this date (YYYY-MM-DD, ISO datetime, or Nd for last N days). Records with unparseable timestamps are excluded.",
+    ),
+    json_output: bool = typer.Option(
+        False, "--json", help="Output JSON (CI-friendly)"
     ),
 ) -> None:
     """Show cumulative LLM usage and estimated cost from the local ledger."""
@@ -138,43 +214,51 @@ def usage_command(
     state_dir = root / ".giki-state"
     records, skipped = read_ledger(state_dir)
 
+    since_dt = _parse_since(since) if since else None
+    if since_dt is not None:
+        records = [r for r in records if _parse_ts(r.get("ts", "")) >= since_dt]
+
+    if json_output:
+        report = _report(records)
+        payload = {
+            "version": 1,
+            "total": report["total"],
+            "by_command": _jsonable(report["by_command"]),
+            "by_model": _jsonable(report["by_model"]),
+            "ledger_span": report["ledger_span"],
+            "since": since,
+            "since_resolved": since_dt.isoformat() if since_dt else None,
+            "skipped_lines": skipped,
+        }
+        console.print_json(
+            json_module.dumps(payload, indent=2, ensure_ascii=False)
+        )
+        return
+
     if skipped:
         warn(f"skipped {skipped} malformed ledger line(s)")
 
     if not records:
-        info(f"No LLM usage recorded yet (ledger: {state_dir / LEDGER_NAME})")
+        if since_dt is not None:
+            info(f"No LLM usage recorded since {since} (ledger: {state_dir / LEDGER_NAME})")
+        else:
+            info(f"No LLM usage recorded yet (ledger: {state_dir / LEDGER_NAME})")
         return
 
-    total_calls = len(records)
-    total_in = sum(r["input_tokens"] for r in records)
-    total_out = sum(r["output_tokens"] for r in records)
-    known = [r for r in records if r["cost_usd"] is not None]
-    total_cost = sum(r["cost_usd"] for r in known)
-    partial = len(known) < total_calls
+    report = _report(records)
+    total = report["total"]
+    first, last = (_fmt_ts(x) for x in report["ledger_span"])
 
-    first = _fmt_ts(min(records, key=lambda r: _parse_ts(r.get("ts", ""))).get("ts", ""))
-    last = _fmt_ts(max(records, key=lambda r: _parse_ts(r.get("ts", ""))).get("ts", ""))
-
+    title = "LLM Usage (cumulative)" if since_dt is None else f"LLM Usage (since {since})"
     print_panel(
-        f"{total_calls} LLM call(s) · {total_in:,} tokens in · "
-        f"{total_out:,} tokens out\n"
+        f"{total['calls']} LLM call(s) · {total['input_tokens']:,} tokens in · "
+        f"{total['output_tokens']:,} tokens out\n"
         f"estimated total cost: "
-        f"{_fmt_cost(total_cost if known else None, partial)}\n"
+        f"{_fmt_cost(total['cost_usd'], total['partial'])}\n"
         f"ledger span: {first} → {last}",
-        title="LLM Usage (cumulative)",
+        title=title,
     )
 
-    _render_breakdown(
-        "By command",
-        "command",
-        _aggregate(records, lambda r: str(r.get("command") or "?")),
-    )
-    _render_breakdown(
-        "By model",
-        "model",
-        _aggregate(
-            records,
-            lambda r: f"{r.get('provider') or '?'}:{r.get('model') or '?'}",
-        ),
-    )
+    _render_breakdown("By command", "command", report["by_command"])
+    _render_breakdown("By model", "model", report["by_model"])
     _render_recent_runs(records)
