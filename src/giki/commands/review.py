@@ -10,7 +10,7 @@ from pathlib import Path
 import typer
 
 from ..config import ConfigError, load_config
-from ..console import console, error as _error, info, print_panel
+from ..console import console, error as _error, info, print_panel, warn as _warn
 from ..diff import (
     classify_changes,
     get_diff_changes,
@@ -19,6 +19,7 @@ from ..diff import (
 )
 from ..llm import build_client
 from ..llm.base import LLMAdapter
+from ..llm.usage import UsageTracker
 from ..review_models import (
     ChangeType,
     FileChange,
@@ -122,7 +123,8 @@ def review_command(
     pages_reviewed = 0
     pages_skipped = 0
     changed_pages: list[tuple[str, str]] = []
-    review_client: LLMAdapter = build_client(cfg.llm.review)
+    usage = UsageTracker(command="review")
+    review_client: LLMAdapter = usage.wrap(lambda: build_client(cfg.llm.review))
 
     # Build mechanical findings text for prompt
     mech_text = "\n".join(
@@ -214,6 +216,16 @@ def review_command(
         pages_skipped=pages_skipped,
     )
 
+    # Persist the usage ledger (file side effect; safe in --json mode too).
+    # Only when LLM calls were actually made. The ledger is an audit aid —
+    # a write failure must not fail the review.
+    ledger = None
+    if usage.records:
+        try:
+            ledger = usage.append_ledger(cfg.state_dir)
+        except OSError as e:
+            _warn(f"could not write usage ledger: {e}")
+
     # Output
     if json_output:
         console.print_json(
@@ -252,6 +264,13 @@ def review_command(
         # Detailed output
         md = format_markdown(result, collapse_nits=cfg.review.pr_comment_collapse)
         console.print(md)
+
+        # LLM usage panel
+        if usage.records:
+            lines = usage.summary_lines()
+            if ledger is not None:
+                lines.append(f"ledger: {ledger.relative_to(root)}")
+            print_panel("\n".join(lines), title="LLM Usage")
 
     # Post to PR
     if post and pr is not None:

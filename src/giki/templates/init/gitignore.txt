@@ -1,5 +1,6 @@
 # giki state (regeneratable, do not commit)
 .giki-state/*.json
+.giki-state/*.jsonl
 
 # Python
 __pycache__/

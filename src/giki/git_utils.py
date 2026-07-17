@@ -77,11 +77,26 @@ def add_and_commit(
     repo: git.Repo,
     paths: list[Path | str],
     message: str,
+    *,
+    exclude: list[Path | str] | None = None,
 ) -> git.Commit:
-    """Stage the given paths and commit with the given message. Return the commit."""
+    """Stage the given paths and commit with the given message. Return the commit.
+
+    ``exclude`` lists repo-relative paths that must stay out of the commit
+    even when a staged directory contains them (e.g. local state files not
+    covered by an older .gitignore). Excluded paths that were never staged
+    (already gitignored) are silently skipped.
+    """
     string_paths = [str(p) for p in paths]
     if not string_paths:
         raise GitError("no paths to commit")
     repo.index.add(string_paths)
+    if exclude:
+        # `git rm --cached` works on unborn HEAD (unlike index.reset) and
+        # --ignore-unmatch keeps it silent when the path was never staged.
+        repo.git.rm(
+            "--cached", "-r", "--quiet", "--ignore-unmatch", "--",
+            *[str(p) for p in exclude],
+        )
     commit = repo.index.commit(message)
     return commit

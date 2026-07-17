@@ -12,8 +12,10 @@ from pathlib import Path
 import typer
 
 from ..config import ConfigError, load_config
+from ..llm import build_client
+from ..llm.usage import UsageTracker
 from ..orchestrator import Ingester
-from ..console import console, success, error, info, heading, print_panel
+from ..console import console, success, error, info, warn, print_panel
 
 
 def ingest_command(
@@ -60,6 +62,11 @@ def ingest_command(
 
     ingester = Ingester(config)
 
+    # Track LLM usage across the whole batch; the wrapped client is built
+    # lazily, so runs that make no LLM calls never require an API key.
+    usage = UsageTracker(command="ingest")
+    llm_client = usage.wrap(lambda: build_client(config.llm.compile))
+
     n_sources = 0
     total_created = 0
     total_updated = 0
@@ -76,6 +83,7 @@ def ingest_command(
                 yes=yes,
                 dry_run=dry_run,
                 retry_failed=retry_failed,
+                llm_client=llm_client,
             )
         except Exception as exc:  # per-path failure — keep going
             any_exception = True
@@ -105,6 +113,19 @@ def ingest_command(
     ]
     console.print()
     print_panel("\n".join(summary_lines), title="Ingest Summary")
+
+    # LLM usage panel + ledger (only when LLM calls were actually made).
+    # The ledger is an audit aid — a write failure must not fail the run.
+    if usage.records:
+        ledger = None
+        try:
+            ledger = usage.append_ledger(config.state_dir)
+        except OSError as e:
+            warn(f"could not write usage ledger: {e}")
+        lines = usage.summary_lines()
+        if ledger is not None:
+            lines.append(f"ledger: {ledger.relative_to(config.root)}")
+        print_panel("\n".join(lines), title="LLM Usage")
 
     if any_exception or total_failed > 0:
         raise typer.Exit(code=1)

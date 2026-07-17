@@ -70,6 +70,10 @@ giki review --base main
 
 <p align="center"><img src="screenshots/obsidian-graph.png" alt="Obsidian 图谱视图" width="650"></p>
 
+**清楚每次运行花了多少钱：**
+
+每次 `giki ingest` 和 `giki review` 结束时都会显示 LLM 用量面板——调用次数、输入/输出 token 数、按内置刊例价估算的美元成本（未收录的模型显示 `n/a`）。每次调用还会追加到本地账本 `.giki-state/usage.jsonl`——原始 JSONL 记录，可以自行分析，比如算累计花费：`jq -s 'map(.cost_usd // 0) | add' .giki-state/usage.jsonl`。
+
 ## 工作原理
 
 1. 原始文档放进 `sources/`

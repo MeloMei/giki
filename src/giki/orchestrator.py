@@ -19,6 +19,7 @@ from .git_utils import add_and_commit, checkout_branch, open_repo, ensure_clean_
 from .llm import build_client
 from .llm.base import LLMAdapter, LLMError, Message
 from .llm.prompts import PromptTemplate
+from .llm.usage import LEDGER_NAME
 from .sources.loader import LoadedSource, load_source
 from .sources.state import SourceState
 from .utils import extract_json, iso_now, to_slug
@@ -449,8 +450,12 @@ class Ingester:
 
         if not paths:
             return None
+        # The usage ledger is local audit state; older .gitignore files do
+        # not cover *.jsonl, so exclude it explicitly to keep it out of
+        # user commits.
+        ledger_rel = (prefix / ".giki-state" / LEDGER_NAME).as_posix()
         try:
-            return add_and_commit(repo, paths, msg)
+            return add_and_commit(repo, paths, msg, exclude=[ledger_rel])
         except Exception:
             return None
 

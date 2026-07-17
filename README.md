@@ -70,6 +70,10 @@ Point Obsidian at your `wiki/` directory and you get the full graph view with ba
 
 <p align="center"><img src="docs/screenshots/obsidian-graph.png" alt="Obsidian graph view" width="650"></p>
 
+**Know what every run costs:**
+
+Every `giki ingest` and `giki review` ends with an LLM usage panel — calls made, tokens in/out, and an estimated cost in USD (built-in list prices; models with unknown pricing show `n/a`). Each call is also appended to a local ledger at `.giki-state/usage.jsonl` — raw JSONL records you can analyze yourself, e.g. cumulative spend: `jq -s 'map(.cost_usd // 0) | add' .giki-state/usage.jsonl`.
+
 ## How it works
 
 1. Raw documents go into `sources/`
