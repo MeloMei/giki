@@ -17,6 +17,7 @@ from giki.llm.usage import (
     UsageTracker,
     estimate_cost,
     extract_tokens,
+    is_local_endpoint,
 )
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
@@ -67,6 +68,37 @@ class TestEstimateCost:
         assert estimate_cost("my-local-model", 1000, 1000) is None
 
 
+# --- is_local_endpoint -----------------------------------------------------
+
+
+class TestIsLocalEndpoint:
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "http://localhost:11434",
+            "http://127.0.0.1:11434/v1",
+            "http://0.0.0.0:8000",
+            "http://[::1]:11434",
+            "https://LOCALHOST",
+        ],
+    )
+    def test_local_urls(self, url):
+        assert is_local_endpoint(url) is True
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://api.anthropic.com",
+            "https://api.openai.com/v1",
+            "http://192.168.1.10:11434",  # LAN, not loopback
+            "http://127.evil.com",        # DNS name starting with 127. is NOT local
+            "",
+        ],
+    )
+    def test_remote_urls(self, url):
+        assert is_local_endpoint(url) is False
+
+
 # --- UsageTracker ----------------------------------------------------------
 
 
@@ -111,6 +143,27 @@ class TestUsageTracker:
                  usage={"input_tokens": 999, "output_tokens": 999})
         cost, partial = t.cost_summary()
         assert cost == pytest.approx(3.0)
+        assert partial is True
+
+    def test_local_endpoint_costs_zero_not_partial(self):
+        t = UsageTracker(command="ingest")
+        t.record(provider="openai", model="llama3.1",
+                 usage={"input_tokens": 5000, "output_tokens": 1000},
+                 base_url="http://localhost:11434")
+        rec = t.records[0]
+        assert rec.cost_usd == 0.0
+        assert rec.base_url == "http://localhost:11434"
+        cost, partial = t.cost_summary()
+        assert cost == 0.0
+        assert partial is False
+
+    def test_remote_unknown_model_stays_partial(self):
+        t = UsageTracker(command="ingest")
+        t.record(provider="openai", model="some-fine-tune",
+                 usage={"input_tokens": 100, "output_tokens": 10},
+                 base_url="https://gateway.example.com/v1")
+        assert t.records[0].cost_usd is None
+        _, partial = t.cost_summary()
         assert partial is True
 
     def test_summary_lines_known_cost(self):
@@ -190,6 +243,16 @@ class TestTrackingAdapter:
         with patch.object(tracker, "record", side_effect=RuntimeError("boom")):
             resp = client.chat([Message(role="user", content="hi")])
         assert resp.text == "ok"
+
+    def test_local_base_url_flows_from_adapter(self):
+        class _LocalLLM(_FakeLLM):
+            base_url = "http://localhost:11434"
+            model = "llama3.1"
+
+        tracker = UsageTracker(command="ingest")
+        client = tracker.wrap(lambda: _LocalLLM({"input_tokens": 100, "output_tokens": 10}))
+        client.chat([Message(role="user", content="hi")])
+        assert tracker.records[0].cost_usd == 0.0
 
 
 # --- ledger ----------------------------------------------------------------

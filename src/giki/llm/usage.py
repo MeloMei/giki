@@ -13,11 +13,13 @@ write must never break the command the user actually ran.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
+from urllib.parse import urlparse
 
 from ..utils import iso_now
 from .base import LLMAdapter, LLMResponse, Message
@@ -52,6 +54,27 @@ def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float | 
         if m.startswith(prefix):
             return (input_tokens * price_in + output_tokens * price_out) / 1_000_000
     return None
+
+
+def is_local_endpoint(base_url: str) -> bool:
+    """Return True when the endpoint runs on this machine (loopback/unspecified).
+
+    Calls against loopback endpoints (local Ollama, vLLM, LM Studio) cost
+    nothing, so they must not poison the "unknown pricing" flag on reports.
+    LAN addresses are deliberately NOT local — a 192.168/10.x host may be a
+    billed gateway.
+    """
+    try:
+        host = (urlparse(base_url).hostname or "").lower()
+    except ValueError:
+        return False
+    if host == "localhost":
+        return True
+    try:
+        addr = ipaddress.ip_address(host)
+    except ValueError:
+        return False  # a DNS name, not an IP literal
+    return addr.is_loopback or addr.is_unspecified
 
 
 def _as_int(value) -> int:
@@ -99,6 +122,7 @@ class UsageRecord:
     input_tokens: int
     output_tokens: int
     cost_usd: float | None
+    base_url: str | None = None
 
     def to_json(self) -> str:
         return json.dumps(
@@ -111,6 +135,7 @@ class UsageRecord:
                 "input_tokens": self.input_tokens,
                 "output_tokens": self.output_tokens,
                 "cost_usd": self.cost_usd,
+                "base_url": self.base_url,
             },
             ensure_ascii=False,
         )
@@ -132,8 +157,19 @@ class UsageTracker:
         """
         return _TrackingAdapter(factory, self)
 
-    def record(self, *, provider: str, model: str, usage: dict | None) -> UsageRecord:
+    def record(
+        self,
+        *,
+        provider: str,
+        model: str,
+        usage: dict | None,
+        base_url: str | None = None,
+    ) -> UsageRecord:
         inp, out = extract_tokens(usage)
+        if base_url and is_local_endpoint(base_url):
+            cost: float | None = 0.0  # local endpoints (Ollama etc.) are free
+        else:
+            cost = estimate_cost(model, inp, out)
         rec = UsageRecord(
             ts=iso_now(),
             command=self.command,
@@ -142,7 +178,8 @@ class UsageTracker:
             model=model,
             input_tokens=inp,
             output_tokens=out,
-            cost_usd=estimate_cost(model, inp, out),
+            cost_usd=cost,
+            base_url=base_url,
         )
         self.records.append(rec)
         return rec
@@ -313,6 +350,7 @@ class _TrackingAdapter(LLMAdapter):
                 provider=getattr(inner, "provider", "unknown"),
                 model=getattr(inner, "model", "unknown"),
                 usage=resp.usage,
+                base_url=getattr(inner, "base_url", None),
             )
         except Exception:
             # Tracking is best-effort; never let it break a successful call.
