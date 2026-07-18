@@ -15,8 +15,9 @@ import typer
 from rich import box
 from rich.table import Table
 
+from ..config import load_config
 from ..console import console, error, heading, info, print_panel, warn
-from ..llm.usage import LEDGER_NAME, read_ledger
+from ..llm.usage import LEDGER_NAME, estimate_cost, is_local_endpoint, read_ledger
 
 
 def _fmt_cost(cost: float | None, partial: bool) -> str:
@@ -196,6 +197,33 @@ def _jsonable(groups: dict[str, dict]) -> dict[str, dict]:
     }
 
 
+def _reprice(records: list[dict], pricing: dict | None) -> int:
+    """Re-estimate records whose cost was unknown at write time.
+
+    The ledger is the audit snapshot for priced records, but ``null`` costs
+    just mean "we didn't know the price back then" — re-pricing them with
+    the *current* config (custom ``pricing:`` section, loopback base_url)
+    closes the gap without rewriting history. Returns the re-priced count.
+    """
+    n = 0
+    for r in records:
+        if r["cost_usd"] is not None:
+            continue
+        base_url = r.get("base_url")
+        if base_url and is_local_endpoint(str(base_url)):
+            r["cost_usd"] = 0.0
+        else:
+            r["cost_usd"] = estimate_cost(
+                str(r.get("model") or ""),
+                r["input_tokens"],
+                r["output_tokens"],
+                pricing,
+            )
+        if r["cost_usd"] is not None:
+            n += 1
+    return n
+
+
 def _budget_status(cost: float | None, partial: bool, budget: float) -> dict:
     """Compare the (known) cost against the budget.
 
@@ -244,6 +272,19 @@ def usage_command(
     if since_dt is not None:
         records = [r for r in records if _parse_ts(r.get("ts", "")) >= since_dt]
 
+    # Re-price historical records whose cost was unknown at write time,
+    # using the current config's custom pricing (if any). A missing config
+    # is fine (CI may persist only .giki-state/); a BROKEN config must be
+    # surfaced — silently falling back would hide the user's typo.
+    pricing = None
+    if (root / ".giki" / "config.yaml").exists():
+        try:
+            pricing = load_config(root).pricing
+        except Exception as e:
+            # stderr: keeps --json stdout pure.
+            error(f"could not load config for re-pricing: {e}")
+    repriced = _reprice(records, pricing)
+
     if json_output:
         report = _report(records)
         payload = {
@@ -255,6 +296,7 @@ def usage_command(
             "since": since,
             "since_resolved": since_dt.isoformat() if since_dt else None,
             "skipped_lines": skipped,
+            "repriced": repriced,
         }
         if budget is not None:
             payload["budget"] = _budget_status(
@@ -274,6 +316,9 @@ def usage_command(
 
     if skipped:
         warn(f"skipped {skipped} malformed ledger line(s)")
+
+    if repriced:
+        info(f"{repriced} historical record(s) re-priced using current config")
 
     if not records:
         if since_dt is not None:

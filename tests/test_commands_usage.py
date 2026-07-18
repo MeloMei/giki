@@ -123,7 +123,7 @@ class TestUsageCommand:
     def test_partial_cost_marked(self, runner, tmp_path):
         _write_ledger(
             tmp_path / ".giki-state",
-            [_rec(cost=0.0105), _rec(run_id="run2", cost=None)],
+            [_rec(cost=0.0105), _rec(run_id="run2", model="mystery", cost=None)],
         )
         result = runner.invoke(app, ["usage", "--root", str(tmp_path)])
         assert result.exit_code == 0, result.output
@@ -131,7 +131,7 @@ class TestUsageCommand:
         assert ">= $0.0105" in out
 
     def test_all_unknown_cost_shows_na(self, runner, tmp_path):
-        _write_ledger(tmp_path / ".giki-state", [_rec(cost=None)])
+        _write_ledger(tmp_path / ".giki-state", [_rec(model="mystery", cost=None)])
         result = runner.invoke(app, ["usage", "--root", str(tmp_path)])
         assert result.exit_code == 0, result.output
         out = _ANSI_RE.sub("", result.stdout)
@@ -182,7 +182,7 @@ class TestUsageCommand:
         _write_ledger(
             tmp_path / ".giki-state",
             [
-                _rec(tin="abc", tout=None, cost="not-a-number"),
+                _rec(model="mystery", tin="abc", tout=None, cost="not-a-number"),
                 _rec(run_id=12345, command=None, cost="0.5"),
             ],
         )
@@ -340,7 +340,7 @@ class TestJsonOutput:
             tmp_path / ".giki-state",
             [
                 _rec(tin=1000, tout=500, cost=0.0105),
-                _rec(command="review", run_id="run2", model="gpt-4o",
+                _rec(command="review", run_id="run2", model="mystery-model",
                      provider="openai", tin=2000, tout=1000, cost=None),
             ],
         )
@@ -354,7 +354,7 @@ class TestJsonOutput:
         assert data["total"]["cost_usd"] == pytest.approx(0.0105)
         assert data["total"]["partial"] is True
         assert data["by_command"]["ingest"]["calls"] == 1
-        assert data["by_model"]["openai:gpt-4o"]["cost_usd"] is None
+        assert data["by_model"]["openai:mystery-model"]["cost_usd"] is None
         assert data["skipped_lines"] == 0
         assert data["since"] is None
         assert data["since_resolved"] is None
@@ -424,7 +424,7 @@ class TestBudget:
     def test_budget_partial_cost_warns(self, runner, tmp_path):
         _write_ledger(
             tmp_path / ".giki-state",
-            [_rec(cost=1.0), _rec(run_id="run2", cost=None)],
+            [_rec(cost=1.0), _rec(run_id="run2", model="mystery", cost=None)],
         )
         result = runner.invoke(
             app, ["usage", "--root", str(tmp_path), "--budget", "5"]
@@ -506,7 +506,7 @@ class TestBudget:
         assert result.exit_code == 1, result.output
 
     def test_all_unknown_cost_with_budget(self, runner, tmp_path):
-        _write_ledger(tmp_path / ".giki-state", [_rec(cost=None)])
+        _write_ledger(tmp_path / ".giki-state", [_rec(model="mystery", cost=None)])
         result = runner.invoke(
             app, ["usage", "--root", str(tmp_path), "--budget", "5"]
         )
@@ -531,3 +531,113 @@ class TestBudget:
         data = json.loads(result.stdout)
         assert data["budget"]["exceeded"] is False
         assert data["budget"]["cost"] is None
+
+
+# --- historical re-pricing -------------------------------------------------
+
+
+_CFG_WITH_PRICING = """
+llm:
+  compile:
+    provider: claude
+    model: m
+    base_url: https://x
+    api_key_env: K
+  review:
+    provider: claude
+    model: m
+    base_url: https://x
+    api_key_env: K
+pricing:
+  my-gateway-model: [1.0, 4.0]
+"""
+
+
+class TestRepricing:
+    def test_null_cost_repriced_with_config_pricing(self, runner, tmp_path):
+        (tmp_path / ".giki").mkdir()
+        (tmp_path / ".giki" / "config.yaml").write_text(
+            _CFG_WITH_PRICING, encoding="utf-8"
+        )
+        _write_ledger(
+            tmp_path / ".giki-state",
+            [_rec(model="my-gateway-model", cost=None, tin=1_000_000, tout=0)],
+        )
+        result = runner.invoke(app, ["usage", "--root", str(tmp_path)])
+        assert result.exit_code == 0, result.output
+        out = _ANSI_RE.sub("", result.stdout)
+        assert "1 historical record(s) re-priced" in out
+        assert "$1.0000" in out
+        assert "n/a" not in out
+
+    def test_null_cost_repriced_via_loopback_base_url(self, runner, tmp_path):
+        rec = _rec(model="llama3.1", cost=None)
+        rec["base_url"] = "http://localhost:11434"
+        _write_ledger(tmp_path / ".giki-state", [rec])
+        result = runner.invoke(app, ["usage", "--root", str(tmp_path), "--json"])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.stdout)
+        assert data["repriced"] == 1
+        assert data["total"]["cost_usd"] == 0.0
+        assert data["total"]["partial"] is False
+
+    def test_unpriced_record_stays_na_without_config(self, runner, tmp_path):
+        _write_ledger(tmp_path / ".giki-state", [_rec(model="mystery", cost=None)])
+        result = runner.invoke(app, ["usage", "--root", str(tmp_path), "--json"])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.stdout)
+        assert data["repriced"] == 0
+        assert data["total"]["cost_usd"] is None
+        assert data["total"]["partial"] is True
+
+    def test_builtin_table_reprices_known_models(self, runner, tmp_path):
+        # No config at all — records with built-in-known models are still
+        # re-priced (e.g. model added to the built-in table after the fact).
+        _write_ledger(
+            tmp_path / ".giki-state",
+            [_rec(model="gpt-4o", cost=None, tin=1_000_000, tout=0)],
+        )
+        result = runner.invoke(app, ["usage", "--root", str(tmp_path), "--json"])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.stdout)
+        assert data["repriced"] == 1
+        assert data["total"]["cost_usd"] == pytest.approx(2.5)
+        assert data["total"]["partial"] is False
+
+    def test_broken_config_warns_but_still_runs(self, runner, tmp_path):
+        (tmp_path / ".giki").mkdir()
+        (tmp_path / ".giki" / "config.yaml").write_text(
+            "pricing:\n  my-model: [oops, 4.0]\n", encoding="utf-8"
+        )
+        _write_ledger(tmp_path / ".giki-state", [_rec(model="mystery", cost=None)])
+        result = runner.invoke(app, ["usage", "--root", str(tmp_path)])
+        assert result.exit_code == 0, result.output
+        err = _ANSI_RE.sub("", result.stderr or "")
+        assert "could not load config for re-pricing" in err
+
+    def test_broken_config_keeps_json_stdout_pure(self, runner, tmp_path):
+        (tmp_path / ".giki").mkdir()
+        (tmp_path / ".giki" / "config.yaml").write_text(
+            "pricing:\n  my-model: [oops, 4.0]\n", encoding="utf-8"
+        )
+        _write_ledger(tmp_path / ".giki-state", [_rec(model="mystery", cost=None)])
+        result = runner.invoke(app, ["usage", "--root", str(tmp_path), "--json"])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.stdout)  # stdout stays parseable
+        assert data["repriced"] == 0
+
+    def test_priced_records_are_not_reestimated(self, runner, tmp_path):
+        (tmp_path / ".giki").mkdir()
+        (tmp_path / ".giki" / "config.yaml").write_text(
+            _CFG_WITH_PRICING, encoding="utf-8"
+        )
+        # ledger snapshot says 0.5; config would price it at 1.0 — snapshot wins
+        _write_ledger(
+            tmp_path / ".giki-state",
+            [_rec(model="my-gateway-model", cost=0.5, tin=1_000_000, tout=0)],
+        )
+        result = runner.invoke(app, ["usage", "--root", str(tmp_path), "--json"])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.stdout)
+        assert data["repriced"] == 0
+        assert data["total"]["cost_usd"] == pytest.approx(0.5)
