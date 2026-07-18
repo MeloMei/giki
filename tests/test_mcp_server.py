@@ -490,6 +490,33 @@ class TestMcpUsageTracking:
         assert len(lines) == 1
         assert json.loads(lines[0])["command"] == "review"
 
+    def test_review_flags_invalid_typed_links(self, tmp_path):
+        """MCP review must run typed-wikilink validation like the CLI does."""
+        from unittest.mock import patch
+
+        from giki.mcp_server import create_server
+
+        repo = self._init_repo(tmp_path, slugs=["test-page"])
+        repo.create_head("feature").checkout()
+        (tmp_path / "wiki" / "test-page.md").write_text(
+            "---\ntitle: Test\ncreated: 2026-01-01T00:00:00+00:00\n"
+            "updated: 2026-01-01T00:00:00+00:00\nsources:\n  - path: src.md\n"
+            "---\n\nSee [[bogus::test-page]].\n",
+            encoding="utf-8",
+        )
+        repo.index.add(["wiki/test-page.md"])
+        repo.index.commit("add test page")
+
+        llm = _ScriptedLLM([json.dumps({"findings": [], "verdict": "approve"})])
+        server = create_server()
+        fn = _get_tool_fn(server, "giki_review")
+        with patch("giki.llm.build_client", return_value=llm):
+            out = fn(base="main", json_output=True, root=str(tmp_path))
+
+        data = json.loads(out)
+        rule_ids = [f["rule_id"] for f in data["findings"]]
+        assert "MECH-TYPED-LINK" in rule_ids
+
     def test_review_json_output_includes_usage(self, tmp_path):
         from unittest.mock import patch
 

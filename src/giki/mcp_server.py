@@ -211,8 +211,9 @@ def create_server() -> FastMCP:
         """Review wiki changes with mechanical checks and semantic analysis.
 
         Runs the two-phase review pipeline: mechanical checks (dead links,
-        frontmatter validation, index sync, unrelated edits) followed by
-        LLM-based semantic review of each changed wiki page.
+        frontmatter validation, index sync, unrelated edits, typed wikilink
+        validation) followed by LLM-based semantic review of each changed
+        wiki page.
 
         Args:
             base: Base branch for diff (default: "main").
@@ -235,6 +236,7 @@ def create_server() -> FastMCP:
             check_dead_links,
             check_frontmatter,
             check_index_sync,
+            check_typed_links,
             check_unrelated_edits,
             cross_page_analysis,
             review_page_semantic,
@@ -289,6 +291,9 @@ def create_server() -> FastMCP:
             all_findings.extend(
                 check_unrelated_edits(changes, config.review.unrelated_edit_threshold)
             )
+
+            # Typed wikilink validation (parity with the CLI review path)
+            all_findings.extend(check_typed_links(wiki_dir, wiki_changes))
 
             # Semantic review per page
             pages_reviewed = 0
