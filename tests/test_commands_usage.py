@@ -397,3 +397,137 @@ class TestJsonOutput:
         assert data["total"]["calls"] == 0
         assert data["total"]["cost_usd"] is None
         assert data["ledger_span"] is None
+
+
+# --- --budget --------------------------------------------------------------
+
+
+class TestBudget:
+    def test_under_budget_exits_zero(self, runner, tmp_path):
+        _write_ledger(tmp_path / ".giki-state", [_rec(cost=0.0105)])
+        result = runner.invoke(
+            app, ["usage", "--root", str(tmp_path), "--budget", "5"]
+        )
+        assert result.exit_code == 0, result.output
+        out = _ANSI_RE.sub("", result.stdout)
+        assert "Budget: $0.0105 of $5.00 used (0%)" in out
+
+    def test_over_budget_exits_one(self, runner, tmp_path):
+        _write_ledger(tmp_path / ".giki-state", [_rec(cost=6.0)])
+        result = runner.invoke(
+            app, ["usage", "--root", str(tmp_path), "--budget", "5"]
+        )
+        assert result.exit_code == 1, result.output
+        out = _ANSI_RE.sub("", result.stdout + (result.stderr or ""))
+        assert "Budget exceeded" in out
+
+    def test_budget_partial_cost_warns(self, runner, tmp_path):
+        _write_ledger(
+            tmp_path / ".giki-state",
+            [_rec(cost=1.0), _rec(run_id="run2", cost=None)],
+        )
+        result = runner.invoke(
+            app, ["usage", "--root", str(tmp_path), "--budget", "5"]
+        )
+        assert result.exit_code == 0, result.output
+        out = _ANSI_RE.sub("", result.stdout)
+        assert "true cost may be higher" in out
+
+    def test_budget_json_block_and_exit_code(self, runner, tmp_path):
+        _write_ledger(tmp_path / ".giki-state", [_rec(cost=6.0)])
+        result = runner.invoke(
+            app, ["usage", "--root", str(tmp_path), "--budget", "5", "--json"]
+        )
+        assert result.exit_code == 1, result.output
+        data = json.loads(result.stdout)  # JSON stays parseable
+        assert data["budget"]["limit"] == 5.0
+        assert data["budget"]["cost"] == pytest.approx(6.0)
+        assert data["budget"]["exceeded"] is True
+        assert data["budget"]["remaining"] == pytest.approx(-1.0)
+
+    def test_budget_json_under_budget(self, runner, tmp_path):
+        _write_ledger(tmp_path / ".giki-state", [_rec(cost=1.0)])
+        result = runner.invoke(
+            app, ["usage", "--root", str(tmp_path), "--budget", "5", "--json"]
+        )
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.stdout)
+        assert data["budget"]["exceeded"] is False
+
+    def test_budget_composes_with_since(self, runner, tmp_path):
+        _write_ledger(
+            tmp_path / ".giki-state",
+            [
+                _rec(run_id="old", cost=100.0, ts="2026-07-01T08:00:00+00:00"),
+                _rec(run_id="new", cost=1.0, ts="2026-07-16T08:00:00+00:00"),
+            ],
+        )
+        result = runner.invoke(
+            app,
+            ["usage", "--root", str(tmp_path), "--since", "2026-07-15", "--budget", "5"],
+        )
+        assert result.exit_code == 0, result.output
+        out = _ANSI_RE.sub("", result.stdout)
+        assert "Budget: $1.0000 of $5.00 used (20%)" in out
+
+    def test_negative_budget_rejected(self, runner, tmp_path):
+        _write_ledger(tmp_path / ".giki-state", [_rec()])
+        result = runner.invoke(
+            app, ["usage", "--root", str(tmp_path), "--budget", "-5"]
+        )
+        assert result.exit_code != 0
+        out = _ANSI_RE.sub("", result.stdout + (result.stderr or ""))
+        assert "--budget must be >= 0" in out
+
+    def test_exactly_at_budget_does_not_exceed(self, runner, tmp_path):
+        # 0.1 + 0.2 == 0.30000000000000004 in float — must not trip the gate.
+        _write_ledger(
+            tmp_path / ".giki-state",
+            [_rec(cost=0.1), _rec(run_id="run2", cost=0.2)],
+        )
+        result = runner.invoke(
+            app, ["usage", "--root", str(tmp_path), "--budget", "0.3"]
+        )
+        assert result.exit_code == 0, result.output
+        out = _ANSI_RE.sub("", result.stdout + (result.stderr or ""))
+        assert "Budget exceeded" not in out
+
+    def test_zero_budget(self, runner, tmp_path):
+        _write_ledger(tmp_path / ".giki-state", [_rec(cost=0.0)])
+        result = runner.invoke(
+            app, ["usage", "--root", str(tmp_path), "--budget", "0"]
+        )
+        assert result.exit_code == 0, result.output
+
+        _write_ledger(tmp_path / ".giki-state", [_rec(cost=0.01)])
+        result = runner.invoke(
+            app, ["usage", "--root", str(tmp_path), "--budget", "0"]
+        )
+        assert result.exit_code == 1, result.output
+
+    def test_all_unknown_cost_with_budget(self, runner, tmp_path):
+        _write_ledger(tmp_path / ".giki-state", [_rec(cost=None)])
+        result = runner.invoke(
+            app, ["usage", "--root", str(tmp_path), "--budget", "5"]
+        )
+        assert result.exit_code == 0, result.output
+        out = _ANSI_RE.sub("", result.stdout)
+        assert "n/a of $5.00 used" in out
+        assert "true cost may be higher" in out
+
+    def test_empty_ledger_with_budget(self, runner, tmp_path):
+        result = runner.invoke(
+            app, ["usage", "--root", str(tmp_path), "--budget", "5"]
+        )
+        assert result.exit_code == 0, result.output
+        out = _ANSI_RE.sub("", result.stdout)
+        assert "Budget: $0.0000 of $5.00 used (0%)" in out
+
+    def test_empty_ledger_with_budget_json(self, runner, tmp_path):
+        result = runner.invoke(
+            app, ["usage", "--root", str(tmp_path), "--budget", "5", "--json"]
+        )
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.stdout)
+        assert data["budget"]["exceeded"] is False
+        assert data["budget"]["cost"] is None

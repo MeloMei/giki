@@ -15,7 +15,7 @@ import typer
 from rich import box
 from rich.table import Table
 
-from ..console import console, heading, info, print_panel, warn
+from ..console import console, error, heading, info, print_panel, warn
 from ..llm.usage import LEDGER_NAME, read_ledger
 
 
@@ -196,6 +196,24 @@ def _jsonable(groups: dict[str, dict]) -> dict[str, dict]:
     }
 
 
+def _budget_status(cost: float | None, partial: bool, budget: float) -> dict:
+    """Compare the (known) cost against the budget.
+
+    ``exceeded`` compares only known costs — when ``partial`` is True the
+    true cost may be higher, which callers must surface as a caveat.
+    Comparison happens in the same rounded domain as ``remaining`` so
+    float noise (0.1 + 0.2) never flips an exactly-at-budget result.
+    """
+    known_cost = 0.0 if cost is None else cost
+    return {
+        "limit": budget,
+        "cost": cost,
+        "remaining": round(budget - known_cost, 6),
+        "exceeded": round(known_cost - budget, 6) > 0,
+        "partial": partial,
+    }
+
+
 def usage_command(
     root: Path = typer.Option(
         Path("."), "--root", help="Knowledge base root directory"
@@ -208,8 +226,16 @@ def usage_command(
     json_output: bool = typer.Option(
         False, "--json", help="Output JSON (CI-friendly)"
     ),
+    budget: float | None = typer.Option(
+        None,
+        "--budget",
+        help="Budget limit in USD for the selected period; exit code 1 when the estimated cost exceeds it. Only models with known pricing count toward the comparison.",
+    ),
 ) -> None:
     """Show cumulative LLM usage and estimated cost from the local ledger."""
+    if budget is not None and budget < 0:
+        raise typer.BadParameter("--budget must be >= 0")
+
     root = root.resolve()
     state_dir = root / ".giki-state"
     records, skipped = read_ledger(state_dir)
@@ -230,9 +256,20 @@ def usage_command(
             "since_resolved": since_dt.isoformat() if since_dt else None,
             "skipped_lines": skipped,
         }
+        if budget is not None:
+            payload["budget"] = _budget_status(
+                report["total"]["cost_usd"], report["total"]["partial"], budget
+            )
         console.print_json(
             json_module.dumps(payload, indent=2, ensure_ascii=False)
         )
+        if budget is not None and payload["budget"]["exceeded"]:
+            # stderr note for humans reading CI logs; stdout stays pure JSON.
+            error(
+                f"Budget exceeded: est. cost ${payload['budget']['cost']:.4f} "
+                f"> budget ${budget:.2f}"
+            )
+            raise typer.Exit(code=1)
         return
 
     if skipped:
@@ -243,6 +280,8 @@ def usage_command(
             info(f"No LLM usage recorded since {since} (ledger: {state_dir / LEDGER_NAME})")
         else:
             info(f"No LLM usage recorded yet (ledger: {state_dir / LEDGER_NAME})")
+        if budget is not None:
+            info(f"Budget: $0.0000 of ${budget:.2f} used (0%)")
         return
 
     report = _report(records)
@@ -262,3 +301,20 @@ def usage_command(
     _render_breakdown("By command", "command", report["by_command"])
     _render_breakdown("By model", "model", report["by_model"])
     _render_recent_runs(records)
+
+    if budget is not None:
+        status = _budget_status(total["cost_usd"], total["partial"], budget)
+        if status["exceeded"]:
+            error(
+                f"Budget exceeded: est. cost ${status['cost']:.4f} "
+                f"> budget ${budget:.2f}"
+            )
+        elif status["cost"] is None:
+            info(f"Budget: n/a of ${budget:.2f} used (unknown pricing)")
+        else:
+            pct = (status["cost"] / budget * 100) if budget > 0 else 0.0
+            info(f"Budget: ${status['cost']:.4f} of ${budget:.2f} used ({pct:.0f}%)")
+        if status["partial"]:
+            warn("some models have unknown pricing — the true cost may be higher")
+        if status["exceeded"]:
+            raise typer.Exit(code=1)

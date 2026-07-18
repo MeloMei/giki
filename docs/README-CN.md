@@ -72,7 +72,7 @@ giki review --base main
 
 **清楚每次运行花了多少钱：**
 
-每次 `giki ingest` 和 `giki review` 结束时都会显示 LLM 用量面板——调用次数、输入/输出 token 数、按内置刊例价估算的美元成本（未收录的模型显示 `n/a`；部分模型定价未知时显示 `>= $X` 作为下限）。每次调用还会追加到本地账本 `.giki-state/usage.jsonl`——通过 MCP 工具（`giki_ingest` / `giki_review`）发起的调用也会同样入账。随时运行 `giki usage` 可以查看累计总量、按命令和按模型的明细，以及最近的运行记录。用 `giki usage --since 2026-07-01` 回答"我这个月花了多少"（或 `--since 30d` 看最近 30 天滚动窗口），加 `--json` 输出机器可读结果，方便 CI 预算检查和脚本化报表。
+每次 `giki ingest` 和 `giki review` 结束时都会显示 LLM 用量面板——调用次数、输入/输出 token 数、按内置刊例价估算的美元成本（未收录的模型显示 `n/a`；部分模型定价未知时显示 `>= $X` 作为下限）。每次调用还会追加到本地账本 `.giki-state/usage.jsonl`——通过 MCP 工具（`giki_ingest` / `giki_review`）发起的调用也会同样入账。随时运行 `giki usage` 可以查看累计总量、按命令和按模型的明细，以及最近的运行记录。用 `giki usage --since 2026-07-01` 回答"我这个月花了多少"（或 `--since 30d` 看最近 30 天滚动窗口），加 `--json` 输出机器可读结果，方便 CI 预算检查和脚本化报表。再加 `--budget USD` 就变成预算门禁——例如 `giki usage --since 30d --budget 5`，当月估算花费超过 $5 时以非零码退出。门禁只比较定价已知的模型花费，定价未知的调用会被标记但不计入。账本是本地文件，在 CI 里需要通过 cache 或 artifact 持久化 `.giki-state/`，门禁才能看到历史花费。
 
 ## 工作原理
 
@@ -123,7 +123,7 @@ llm:
 | `giki ingest <path...> [--branch NAME] [--yes]` | 把源文档编译成 wiki 页面。 |
 | `giki review [--base BRANCH] [--pr N] [--json]` | 两阶段审查：机械检查 + LLM 语义分析。 |
 | `giki lint [--fix]` | 检查 wiki 健康：断链、孤立页、frontmatter 问题。`--fix` 自动修复。 |
-| `giki usage [--root PATH] [--since DATE\|Nd] [--json]` | 查看本地账本中的累计 LLM 用量和估算成本。 |
+| `giki usage [--root PATH] [--since DATE\|Nd] [--json] [--budget USD]` | 查看本地账本中的累计 LLM 用量和估算成本。`--budget` 超预算时非零退出。 |
 | `giki config show \| set <key> <value>` | 查看或修改配置。 |
 | `giki mcp-serve` | 启动 MCP 服务器，供平台集成。 |
 
