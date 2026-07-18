@@ -156,3 +156,72 @@ class TestConfigPaths:
         assert cfg.root == root.resolve()
         assert cfg.giki_dir == (root / ".giki").resolve()
         assert cfg.state_dir == (root / ".giki-state").resolve()
+
+
+class TestPricing:
+    def test_pricing_defaults_to_empty(self, tmp_path):
+        root = _write_config(tmp_path, VALID_YAML)
+        cfg = load_config(root)
+        assert cfg.pricing == {}
+
+    def test_pricing_section_parsed(self, tmp_path):
+        body = VALID_YAML + (
+            "\npricing:\n  my-gateway-model: [1.0, 4.0]\n  free-model: [0, 0]\n"
+        )
+        root = _write_config(tmp_path, body)
+        cfg = load_config(root)
+        assert cfg.pricing == {
+            "my-gateway-model": (1.0, 4.0),
+            "free-model": (0.0, 0.0),
+        }
+
+    def test_pricing_bad_shape_raises(self, tmp_path):
+        body = VALID_YAML + "\npricing:\n  my-model: 1.5\n"
+        _write_config(tmp_path, body)
+        with pytest.raises(ConfigError, match="pricing.my-model"):
+            load_config(tmp_path)
+
+    def test_pricing_non_numeric_raises(self, tmp_path):
+        body = VALID_YAML + "\npricing:\n  my-model: [cheap, dear]\n"
+        _write_config(tmp_path, body)
+        with pytest.raises(ConfigError, match="pricing.my-model"):
+            load_config(tmp_path)
+
+    def test_pricing_non_mapping_raises(self, tmp_path):
+        body = VALID_YAML + "\npricing: 42\n"
+        _write_config(tmp_path, body)
+        with pytest.raises(ConfigError, match="pricing"):
+            load_config(tmp_path)
+
+    def test_pricing_nan_inf_rejected(self, tmp_path):
+        for i, bad in enumerate((".nan", ".inf", "-.inf")):
+            sub = tmp_path / f"case{i}"
+            sub.mkdir()
+            body = VALID_YAML + f"\npricing:\n  my-model: [{bad}, 1.0]\n"
+            _write_config(sub, body)
+            with pytest.raises(ConfigError, match="pricing.my-model"):
+                load_config(sub)
+
+    def test_pricing_negative_rejected(self, tmp_path):
+        body = VALID_YAML + "\npricing:\n  my-model: [-1.0, 0]\n"
+        _write_config(tmp_path, body)
+        with pytest.raises(ConfigError, match="pricing.my-model"):
+            load_config(tmp_path)
+
+    def test_pricing_bool_rejected(self, tmp_path):
+        body = VALID_YAML + "\npricing:\n  my-model: [yes, 0]\n"
+        _write_config(tmp_path, body)
+        with pytest.raises(ConfigError, match="pricing.my-model"):
+            load_config(tmp_path)
+
+    def test_pricing_empty_prefix_rejected(self, tmp_path):
+        body = VALID_YAML + '\npricing:\n  "": [1.0, 2.0]\n'
+        _write_config(tmp_path, body)
+        with pytest.raises(ConfigError, match="non-empty"):
+            load_config(tmp_path)
+
+    def test_pricing_keys_stored_lowercase(self, tmp_path):
+        body = VALID_YAML + "\npricing:\n  My-Gateway-Model: [1.0, 4.0]\n"
+        root = _write_config(tmp_path, body)
+        cfg = load_config(root)
+        assert cfg.pricing == {"my-gateway-model": (1.0, 4.0)}

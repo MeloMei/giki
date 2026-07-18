@@ -99,7 +99,9 @@ class TestIngestDelegation:
         with patch("giki.commands.ingest.load_config") as m_load, patch(
             "giki.commands.ingest.Ingester"
         ) as m_ingester_cls:
-            m_load.return_value = object()
+            import types
+
+            m_load.return_value = types.SimpleNamespace(pricing={})
             m_ingester = m_ingester_cls.return_value
             m_ingester.ingest.return_value = fake_result
 

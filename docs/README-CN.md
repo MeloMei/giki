@@ -72,7 +72,7 @@ giki review --base main
 
 **清楚每次运行花了多少钱：**
 
-每次 `giki ingest` 和 `giki review` 结束时都会显示 LLM 用量面板——调用次数、输入/输出 token 数、按内置刊例价估算的美元成本（未收录的模型显示 `n/a`；部分模型定价未知时显示 `>= $X` 作为下限；本机端点（localhost/127.x，如本地 Ollama）计为 $0）。每次调用还会追加到本地账本 `.giki-state/usage.jsonl`——通过 MCP 工具（`giki_ingest` / `giki_review`）发起的调用也会同样入账。随时运行 `giki usage` 可以查看累计总量、按命令和按模型的明细，以及最近的运行记录。用 `giki usage --since 2026-07-01` 回答"我这个月花了多少"（或 `--since 30d` 看最近 30 天滚动窗口），加 `--json` 输出机器可读结果，方便 CI 预算检查和脚本化报表。再加 `--budget USD` 就变成预算门禁——例如 `giki usage --since 30d --budget 5`，当月估算花费超过 $5 时以非零码退出。门禁只比较定价已知的模型花费，定价未知的调用会被标记但不计入。账本是本地文件，在 CI 里需要通过 cache 或 artifact 持久化 `.giki-state/`，门禁才能看到历史花费。
+每次 `giki ingest` 和 `giki review` 结束时都会显示 LLM 用量面板——调用次数、输入/输出 token 数、按内置刊例价估算的美元成本（未收录的模型显示 `n/a`；部分模型定价未知时显示 `>= $X` 作为下限；本机端点（localhost/127.x，如本地 Ollama）计为 $0）。每次调用还会追加到本地账本 `.giki-state/usage.jsonl`——通过 MCP 工具（`giki_ingest` / `giki_review`）发起的调用也会同样入账。随时运行 `giki usage` 可以查看累计总量、按命令和按模型的明细，以及最近的运行记录。用 `giki usage --since 2026-07-01` 回答"我这个月花了多少"（或 `--since 30d` 看最近 30 天滚动窗口），加 `--json` 输出机器可读结果，方便 CI 预算检查和脚本化报表。再加 `--budget USD` 就变成预算门禁——例如 `giki usage --since 30d --budget 5`，当月估算花费超过 $5 时以非零码退出。门禁只比较定价已知的模型花费，定价未知的调用会被标记但不计入。如果模型未被内置定价表收录（网关、代理、新发布的模型），可以在 `.giki/config.yaml` 里加 `pricing` 段自定义定价——按前缀匹配、首个命中生效，请把更长的前缀写在前面。账本是本地文件，在 CI 里需要通过 cache 或 artifact 持久化 `.giki-state/`，门禁才能看到历史花费。
 
 ## 工作原理
 
@@ -111,6 +111,11 @@ llm:
     model: gpt-4o
     base_url: https://api.openai.com/v1
     api_key_env: OPENAI_API_KEY
+
+# 可选：为内置定价表未收录的模型定价（美元 / 1M tokens）
+pricing:
+  my-gateway-model: [1.0, 4.0]  # [输入, 输出]
+  my-free-model: [0, 0]
 ```
 
 支持 Claude、GPT、Ollama，以及任何 OpenAI 兼容接口。

@@ -123,7 +123,7 @@ def review_command(
     pages_reviewed = 0
     pages_skipped = 0
     changed_pages: list[tuple[str, str]] = []
-    usage = UsageTracker(command="review")
+    usage = UsageTracker(command="review", pricing=cfg.pricing)
     review_client: LLMAdapter = usage.wrap(lambda: build_client(cfg.llm.review))
 
     # Build mechanical findings text for prompt

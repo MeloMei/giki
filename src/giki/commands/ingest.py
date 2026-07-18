@@ -64,7 +64,7 @@ def ingest_command(
 
     # Track LLM usage across the whole batch; the wrapped client is built
     # lazily, so runs that make no LLM calls never require an API key.
-    usage = UsageTracker(command="ingest")
+    usage = UsageTracker(command="ingest", pricing=config.pricing)
     llm_client = usage.wrap(lambda: build_client(config.llm.compile))
 
     n_sources = 0

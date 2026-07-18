@@ -150,7 +150,7 @@ def create_server() -> FastMCP:
             config = load_config(root_path)
             ingester = Ingester(config)
 
-            usage = UsageTracker(command="ingest")
+            usage = UsageTracker(command="ingest", pricing=config.pricing)
             llm_client = usage.wrap(lambda: build_client(config.llm.compile))
 
             summaries: list[str] = []
@@ -319,7 +319,7 @@ def create_server() -> FastMCP:
             )
 
             # Build LLM client for semantic review (usage-tracked)
-            usage = UsageTracker(command="review")
+            usage = UsageTracker(command="review", pricing=config.pricing)
             review_client = usage.wrap(lambda: build_client(config.llm.review))
             changed_pages: list[tuple[str, str]] = []
 

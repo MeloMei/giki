@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -16,7 +17,7 @@ class ConfigError(Exception):
 
 _VALID_PROVIDERS = {"claude", "openai"}
 _VALID_INTERACTIVE = {"auto", "always", "never"}
-_KNOWN_TOP_LEVEL = {"llm", "ingest", "review", "wiki"}
+_KNOWN_TOP_LEVEL = {"llm", "ingest", "review", "wiki", "pricing"}
 
 
 @dataclass
@@ -73,6 +74,9 @@ class Config:
     root: Path
     giki_dir: Path
     state_dir: Path
+    # Custom pricing overrides: model prefix -> (input, output) USD per 1M
+    # tokens. Checked before the built-in pricing table.
+    pricing: dict[str, tuple[float, float]] = field(default_factory=dict)
 
 
 def load_config(root: Path) -> Config:
@@ -113,6 +117,7 @@ def load_config(root: Path) -> Config:
     ingest = _parse_ingest(raw.get("ingest") or {})
     review = _parse_review(raw.get("review") or {})
     wiki = _parse_wiki(raw.get("wiki") or {})
+    pricing = _parse_pricing(raw.get("pricing") or {})
 
     return Config(
         llm=llm,
@@ -122,6 +127,7 @@ def load_config(root: Path) -> Config:
         root=root,
         giki_dir=(root / ".giki").resolve(),
         state_dir=(root / ".giki-state").resolve(),
+        pricing=pricing,
     )
 
 
@@ -181,3 +187,43 @@ def _parse_wiki(raw: dict) -> WikiConfig:
         max_slug_length=int(raw.get("max_slug_length", 80)),
         related_min_neighbors=int(raw.get("related_min_neighbors", 1)),
     )
+
+
+def _parse_pricing(raw: dict) -> dict[str, tuple[float, float]]:
+    """Parse the optional ``pricing`` section.
+
+    Shape: model prefix -> ``[input_price, output_price]`` in USD per 1M
+    tokens. ``[0, 0]`` marks a free endpoint/model. Keys are stored
+    lowercased (matching is case-insensitive); first hit wins, so longer
+    prefixes should be declared before shorter ones. Note: loopback
+    endpoints always count as $0 regardless of pricing entries.
+    """
+    if not isinstance(raw, dict):
+        raise ConfigError(
+            "config: 'pricing' must be a mapping of model prefix to "
+            "[input_price, output_price] per 1M tokens"
+        )
+    out: dict[str, tuple[float, float]] = {}
+    for key, value in raw.items():
+        prefix = str(key).strip().lower()
+        if not prefix:
+            raise ConfigError("config: 'pricing' keys must be non-empty model prefixes")
+        if not (isinstance(value, (list, tuple)) and len(value) == 2):
+            raise ConfigError(
+                f"config: 'pricing.{key}' must be [input_price, output_price] "
+                f"per 1M tokens"
+            )
+        prices: list[float] = []
+        for v in value:
+            if isinstance(v, bool) or not isinstance(v, (int, float)):
+                raise ConfigError(
+                    f"config: 'pricing.{key}' prices must be numbers"
+                )
+            f = float(v)
+            if not math.isfinite(f) or f < 0:
+                raise ConfigError(
+                    f"config: 'pricing.{key}' prices must be finite numbers >= 0"
+                )
+            prices.append(f)
+        out[prefix] = (prices[0], prices[1])
+    return out

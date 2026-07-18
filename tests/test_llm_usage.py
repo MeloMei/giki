@@ -67,6 +67,38 @@ class TestEstimateCost:
     def test_unknown_model_returns_none(self):
         assert estimate_cost("my-local-model", 1000, 1000) is None
 
+    def test_custom_pricing_covers_unknown_model(self):
+        pricing = {"my-gateway-model": (1.0, 4.0)}
+        cost = estimate_cost("my-gateway-model-v2", 1_000_000, 100_000, pricing)
+        assert cost == pytest.approx(1.0 + 0.4)
+
+    def test_custom_pricing_overrides_builtin(self):
+        pricing = {"claude-sonnet-4": (1.0, 5.0)}
+        cost = estimate_cost("claude-sonnet-4-5", 1_000_000, 0, pricing)
+        assert cost == pytest.approx(1.0)  # not the built-in 3.0
+
+    def test_custom_pricing_free_model(self):
+        pricing = {"my-free-model": (0.0, 0.0)}
+        assert estimate_cost("my-free-model", 999_999, 999_999, pricing) == 0.0
+
+    def test_custom_pricing_falls_through_to_builtin(self):
+        pricing = {"other-model": (1.0, 1.0)}
+        assert estimate_cost("gpt-4o", 1_000_000, 0, pricing) == pytest.approx(2.5)
+
+    def test_tracker_uses_custom_pricing(self):
+        t = UsageTracker(command="ingest", pricing={"mystery": (2.0, 6.0)})
+        t.record(provider="gw", model="mystery-v9",
+                 usage={"input_tokens": 1_000_000, "output_tokens": 1_000_000})
+        assert t.records[0].cost_usd == pytest.approx(8.0)
+        _, partial = t.cost_summary()
+        assert partial is False
+
+    def test_custom_pricing_key_case_insensitive(self):
+        # config stores keys lowercased; model names are matched lowered too
+        pricing = {"my-gateway-model": (1.0, 4.0)}
+        cost = estimate_cost("My-Gateway-Model-V2", 1_000_000, 0, pricing)
+        assert cost == pytest.approx(1.0)
+
 
 # --- is_local_endpoint -----------------------------------------------------
 

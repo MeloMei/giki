@@ -47,12 +47,24 @@ _PRICING: dict[str, tuple[float, float]] = {
 LEDGER_NAME = "usage.jsonl"
 
 
-def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float | None:
-    """Return the estimated USD cost, or None if the model's pricing is unknown."""
+def estimate_cost(
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+    pricing: dict[str, tuple[float, float]] | None = None,
+) -> float | None:
+    """Return the estimated USD cost, or None if the model's pricing is unknown.
+
+    ``pricing`` (from config.yaml) is checked before the built-in table, so
+    users can override list prices or price models the built-in table misses.
+    """
     m = model.lower()
-    for prefix, (price_in, price_out) in _PRICING.items():
-        if m.startswith(prefix):
-            return (input_tokens * price_in + output_tokens * price_out) / 1_000_000
+    for table in (pricing, _PRICING):
+        if not table:
+            continue
+        for prefix, (price_in, price_out) in table.items():
+            if m.startswith(prefix.lower()):
+                return (input_tokens * price_in + output_tokens * price_out) / 1_000_000
     return None
 
 
@@ -144,10 +156,16 @@ class UsageRecord:
 class UsageTracker:
     """Accumulates usage records for a single CLI run."""
 
-    def __init__(self, *, command: str):
+    def __init__(
+        self,
+        *,
+        command: str,
+        pricing: dict[str, tuple[float, float]] | None = None,
+    ):
         self.command = command
         self.run_id = uuid.uuid4().hex[:12]
         self.records: list[UsageRecord] = []
+        self._pricing = pricing
 
     def wrap(self, factory: Callable[[], LLMAdapter]) -> LLMAdapter:
         """Return an adapter that builds the real client on first use.
@@ -169,7 +187,7 @@ class UsageTracker:
         if base_url and is_local_endpoint(base_url):
             cost: float | None = 0.0  # local endpoints (Ollama etc.) are free
         else:
-            cost = estimate_cost(model, inp, out)
+            cost = estimate_cost(model, inp, out, self._pricing)
         rec = UsageRecord(
             ts=iso_now(),
             command=self.command,
