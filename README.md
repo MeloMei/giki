@@ -64,6 +64,16 @@ This is where giki earns its keep. The review bot runs two phases:
 
 Verdicts are `approve`, `comment`, or `request-changes`. The review bot and the compile engine can use different LLMs — this is intentional. Cross-model validation catches hallucinations that a single model might miss.
 
+**Catch knowledge decay before it bites:**
+
+Pages go stale silently — versions get superseded, APIs deprecated, "latest" stops being true. `giki decay` scans your whole wiki for time-sensitive claims and asks the LLM to judge which ones are likely outdated:
+
+```bash
+giki decay
+```
+
+Each page gets a risk rating (high/medium/low) with the specific stale claims and how to fix them. It's a report, not a gate — wire it into a scheduled job and stale pages stop going unnoticed. The LLM judges from its own training knowledge, so treat findings as leads to verify, not verdicts.
+
 **Browse the result in Obsidian:**
 
 Point Obsidian at your `wiki/` directory and you get the full graph view with backlinks, local search, and wikilink navigation. No export needed — giki's wiki pages are just standard markdown with YAML frontmatter.
@@ -72,7 +82,7 @@ Point Obsidian at your `wiki/` directory and you get the full graph view with ba
 
 **Know what every run costs:**
 
-Every `giki ingest` and `giki review` ends with an LLM usage panel — calls made, tokens in/out, and an estimated cost in USD (built-in list prices; models with unknown pricing show `n/a`, a partially priced total shows `>= $X` as a lower bound, and endpoints on this machine (localhost/127.x, e.g. a local Ollama) count as $0). Each call is also appended to a local ledger at `.giki-state/usage.jsonl` — calls made through the MCP tools (`giki_ingest` / `giki_review`) are tracked the same way. Run `giki usage` anytime for cumulative totals, per-command and per-model breakdowns, and recent runs. Use `giki usage --since 2026-07-01` to answer "how much did I spend this month" (or `--since 30d` for a rolling window), and `--json` for CI budget checks and scripted reports. Add `--budget USD` to make it a budget gate — e.g. `giki usage --since 30d --budget 5` exits non-zero when the month's estimated cost exceeds $5. The gate compares costs of models with known pricing; unknown-pricing calls are flagged, not counted. To price a model the built-in table misses (gateways, proxies, brand-new models), add a `pricing` section to `.giki/config.yaml` — entries are prefix-matched, first hit wins, so declare longer prefixes before shorter ones. Historical records that were unpriced at write time are re-priced when you run `giki usage` — using your current `pricing` section, the built-in table, and loopback detection. The ledger is a local file, so in CI persist `.giki-state/` (cache or artifact) for the gate to see historical spend; the gate also needs `.giki/config.yaml` present if you rely on custom pricing.
+Every `giki ingest`, `giki review`, and `giki decay` ends with an LLM usage panel — calls made, tokens in/out, and an estimated cost in USD (built-in list prices; models with unknown pricing show `n/a`, a partially priced total shows `>= $X` as a lower bound, and endpoints on this machine (localhost/127.x, e.g. a local Ollama) count as $0). Each call is also appended to a local ledger at `.giki-state/usage.jsonl` — calls made through the MCP tools (`giki_ingest` / `giki_review`) are tracked the same way. Run `giki usage` anytime for cumulative totals, per-command and per-model breakdowns, and recent runs. Use `giki usage --since 2026-07-01` to answer "how much did I spend this month" (or `--since 30d` for a rolling window), and `--json` for CI budget checks and scripted reports. Add `--budget USD` to make it a budget gate — e.g. `giki usage --since 30d --budget 5` exits non-zero when the month's estimated cost exceeds $5. The gate compares costs of models with known pricing; unknown-pricing calls are flagged, not counted. To price a model the built-in table misses (gateways, proxies, brand-new models), add a `pricing` section to `.giki/config.yaml` — entries are prefix-matched, first hit wins, so declare longer prefixes before shorter ones. Historical records that were unpriced at write time are re-priced when you run `giki usage` — using your current `pricing` section, the built-in table, and loopback detection. The ledger is a local file, so in CI persist `.giki-state/` (cache or artifact) for the gate to see historical spend; the gate also needs `.giki/config.yaml` present if you rely on custom pricing.
 
 ## How it works
 
@@ -129,6 +139,7 @@ Works with Claude, GPT, Ollama, and any OpenAI-compatible endpoint.
 | `giki review [--base BRANCH] [--pr N] [--json]` | Run two-phase review: mechanical checks + LLM semantic analysis. |
 | `giki lint [--fix]` | Check wiki health: dead links, orphans, frontmatter issues. `--fix` auto-repairs. |
 | `giki usage [--root PATH] [--since DATE\|Nd] [--json] [--budget USD]` | Cumulative LLM usage and estimated cost from the local ledger. `--budget` exits non-zero when over budget. |
+| `giki decay [--json] [--max-pages N] [--min-age-days N] [--all]` | Scan the wiki for claims that may have gone stale (knowledge decay report). |
 | `giki config show \| set <key> <value>` | View or update config. |
 | `giki mcp-serve` | Start MCP server for platform integration. |
 

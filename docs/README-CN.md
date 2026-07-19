@@ -64,6 +64,16 @@ giki review --base main
 
 结论分三种：`approve`（通过）、`comment`（建议）、`request-changes`（驳回）。审查机器人和编译引擎可以用不同的 LLM——这是刻意设计的。跨模型交叉验证能发现单一模型可能遗漏的幻觉。
 
+**在知识腐化咬人之前抓住它：**
+
+页面会静默过期——版本被取代、API 被废弃、“最新”悄悄不再是真的。`giki decay` 扫描整个 wiki 的时效敏感声明，让 LLM 判断哪些可能已经过时：
+
+```bash
+giki decay
+```
+
+每个页面得到风险评级（高/中/低）、具体的可疑声明和修复建议。这是报告而非门禁——把它接入定时任务，过时的页面就不会再被忽视。LLM 基于自己的训练知识做判断，请把结果当作需要核实的线索，而不是最终结论。
+
 **在 Obsidian 里浏览结果：**
 
 把 Obsidian 指向 `wiki/` 目录，立刻获得完整的图谱视图、反向链接和本地搜索。不需要导出——giki 的 wiki 页面就是标准的 markdown + YAML frontmatter。
@@ -72,7 +82,7 @@ giki review --base main
 
 **清楚每次运行花了多少钱：**
 
-每次 `giki ingest` 和 `giki review` 结束时都会显示 LLM 用量面板——调用次数、输入/输出 token 数、按内置刊例价估算的美元成本（未收录的模型显示 `n/a`；部分模型定价未知时显示 `>= $X` 作为下限；本机端点（localhost/127.x，如本地 Ollama）计为 $0）。每次调用还会追加到本地账本 `.giki-state/usage.jsonl`——通过 MCP 工具（`giki_ingest` / `giki_review`）发起的调用也会同样入账。随时运行 `giki usage` 可以查看累计总量、按命令和按模型的明细，以及最近的运行记录。用 `giki usage --since 2026-07-01` 回答"我这个月花了多少"（或 `--since 30d` 看最近 30 天滚动窗口），加 `--json` 输出机器可读结果，方便 CI 预算检查和脚本化报表。再加 `--budget USD` 就变成预算门禁——例如 `giki usage --since 30d --budget 5`，当月估算花费超过 $5 时以非零码退出。门禁只比较定价已知的模型花费，定价未知的调用会被标记但不计入。如果模型未被内置定价表收录（网关、代理、新发布的模型），可以在 `.giki/config.yaml` 里加 `pricing` 段自定义定价——按前缀匹配、首个命中生效，请把更长的前缀写在前面。写入时未定价的历史记录，会在你运行 `giki usage` 时自动重估——依据当前的 `pricing` 段、内置定价表和本机端点检测。账本是本地文件，在 CI 里需要通过 cache 或 artifact 持久化 `.giki-state/`，门禁才能看到历史花费；如果你依赖自定义定价，`.giki/config.yaml` 也必须在场。
+每次 `giki ingest`、`giki review` 和 `giki decay` 结束时都会显示 LLM 用量面板——调用次数、输入/输出 token 数、按内置刊例价估算的美元成本（未收录的模型显示 `n/a`；部分模型定价未知时显示 `>= $X` 作为下限；本机端点（localhost/127.x，如本地 Ollama）计为 $0）。每次调用还会追加到本地账本 `.giki-state/usage.jsonl`——通过 MCP 工具（`giki_ingest` / `giki_review`）发起的调用也会同样入账。随时运行 `giki usage` 可以查看累计总量、按命令和按模型的明细，以及最近的运行记录。用 `giki usage --since 2026-07-01` 回答"我这个月花了多少"（或 `--since 30d` 看最近 30 天滚动窗口），加 `--json` 输出机器可读结果，方便 CI 预算检查和脚本化报表。再加 `--budget USD` 就变成预算门禁——例如 `giki usage --since 30d --budget 5`，当月估算花费超过 $5 时以非零码退出。门禁只比较定价已知的模型花费，定价未知的调用会被标记但不计入。如果模型未被内置定价表收录（网关、代理、新发布的模型），可以在 `.giki/config.yaml` 里加 `pricing` 段自定义定价——按前缀匹配、首个命中生效，请把更长的前缀写在前面。写入时未定价的历史记录，会在你运行 `giki usage` 时自动重估——依据当前的 `pricing` 段、内置定价表和本机端点检测。账本是本地文件，在 CI 里需要通过 cache 或 artifact 持久化 `.giki-state/`，门禁才能看到历史花费；如果你依赖自定义定价，`.giki/config.yaml` 也必须在场。
 
 ## 工作原理
 
@@ -129,6 +139,7 @@ pricing:
 | `giki review [--base BRANCH] [--pr N] [--json]` | 两阶段审查：机械检查 + LLM 语义分析。 |
 | `giki lint [--fix]` | 检查 wiki 健康：断链、孤立页、frontmatter 问题。`--fix` 自动修复。 |
 | `giki usage [--root PATH] [--since DATE\|Nd] [--json] [--budget USD]` | 查看本地账本中的累计 LLM 用量和估算成本。`--budget` 超预算时非零退出。 |
+| `giki decay [--json] [--max-pages N] [--min-age-days N] [--all]` | 扫描 wiki 中可能已过时的声明（知识腐化报告）。 |
 | `giki config show \| set <key> <value>` | 查看或修改配置。 |
 | `giki mcp-serve` | 启动 MCP 服务器，供平台集成。 |
 
