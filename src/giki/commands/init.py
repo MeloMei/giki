@@ -75,7 +75,7 @@ def init_command(
     with_action: bool = typer.Option(
         False,
         "--with-action",
-        help="Generate .github/workflows/giki-review.yml",
+        help="Generate GitHub Actions workflows (PR review + weekly decay audit)",
     ),
     root: Path = typer.Option(
         Path("."),
@@ -120,10 +120,13 @@ def init_command(
     for template_name, rel_dest in _FILE_MAP:
         _copy_if_absent(template_name, root / rel_dest)
 
-    # Optional GitHub Action workflow.
+    # Optional GitHub Action workflows (PR review + weekly decay audit).
     if with_action:
         _copy_if_absent(
             "action.yml", root / ".github" / "workflows" / "giki-review.yml"
+        )
+        _copy_if_absent(
+            "decay.yml", root / ".github" / "workflows" / "giki-decay.yml"
         )
 
     # Auto-commit scaffold files so the worktree is clean for immediate ingest.

@@ -437,6 +437,71 @@ class TestDecayCommand:
         assert data["pages_assessed"] == 1
         assert data["assessments"][0]["slug"] == "zzz-old"
 
+    def test_fail_on_high_exits_one(self, runner, tmp_path):
+        _init_kb(tmp_path, {"python-guide": "Python 3.8 is the latest."})
+        llm = _ScriptedLLM([_HIGH_RESP])
+        with patch("giki.commands.decay.build_client", return_value=llm):
+            result = runner.invoke(
+                app, ["decay", "--root", str(tmp_path), "--fail-on", "high"]
+            )
+        assert result.exit_code == 1, result.output
+        out = _ANSI_RE.sub("", result.stdout + (result.stderr or ""))
+        assert "decay gate failed" in out
+
+    def test_fail_on_high_passes_without_high_risk(self, runner, tmp_path):
+        _init_kb(tmp_path, {"python-guide": "Python 3.12 is the latest."})
+        llm = _ScriptedLLM([_LOW_RESP])
+        with patch("giki.commands.decay.build_client", return_value=llm):
+            result = runner.invoke(
+                app, ["decay", "--root", str(tmp_path), "--fail-on", "high"]
+            )
+        assert result.exit_code == 0, result.output
+
+    def test_fail_on_high_json_keeps_payload(self, runner, tmp_path):
+        _init_kb(tmp_path, {"python-guide": "Python 3.8 is the latest."})
+        llm = _ScriptedLLM([_HIGH_RESP])
+        with patch("giki.commands.decay.build_client", return_value=llm):
+            result = runner.invoke(
+                app, ["decay", "--root", str(tmp_path), "--fail-on", "high", "--json"]
+            )
+        assert result.exit_code == 1, result.output
+        data = json.loads(result.stdout)  # stdout stays parseable
+        assert data["assessments"][0]["risk"] == "high"
+
+    def test_fail_on_rejects_other_levels(self, runner, tmp_path):
+        _init_kb(tmp_path, {"python-guide": "Python 3.8 is the latest."})
+        result = runner.invoke(
+            app, ["decay", "--root", str(tmp_path), "--fail-on", "medium"]
+        )
+        assert result.exit_code == 2
+        out = _ANSI_RE.sub("", result.stdout + (result.stderr or ""))
+        assert "only accepts 'high'" in out
+
+    def test_fail_on_high_empty_candidates_exits_zero(self, runner, tmp_path):
+        _init_kb(tmp_path, {
+            "design-patterns": "The observer pattern notifies many observers.",
+        })
+        _make_recent(tmp_path, "design-patterns", "The observer pattern notifies many observers.")
+        result = runner.invoke(
+            app, ["decay", "--root", str(tmp_path), "--fail-on", "high"]
+        )
+        assert result.exit_code == 0, result.output
+
+    def test_unknown_risk_does_not_trip_gate(self, runner, tmp_path):
+        _init_kb(tmp_path, {"python-guide": "Python 3.8 is the latest."})
+
+        class _BrokenLLM(_ScriptedLLM):
+            def chat(self, messages, *, temperature=0.0, max_tokens=4096):
+                raise RuntimeError("API down")
+
+        with patch("giki.commands.decay.build_client", return_value=_BrokenLLM([])):
+            result = runner.invoke(
+                app, ["decay", "--root", str(tmp_path), "--fail-on", "high", "--json"]
+            )
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.stdout)
+        assert data["assessments"][0]["risk"] == "unknown"
+
     def test_old_page_without_signals_is_anchored_by_age(self, runner, tmp_path):
         _init_kb(tmp_path, {
             "design-patterns": "The observer pattern notifies many observers.",

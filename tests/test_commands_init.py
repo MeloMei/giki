@@ -120,6 +120,12 @@ class TestActionWorkflow:
         text = _read(wf)
         assert "giki review --pr" in text
 
+        decay_wf = tmp_path / ".github" / "workflows" / "giki-decay.yml"
+        assert decay_wf.exists()
+        decay_text = _read(decay_wf)
+        assert "giki decay --fail-on high" in decay_text
+        assert "cron" in decay_text
+
     def test_init_without_action_skips_workflow(self, tmp_path, runner):
         _init_git_repo(tmp_path)
         result = runner.invoke(init_app, ["--root", str(tmp_path)])
@@ -127,6 +133,7 @@ class TestActionWorkflow:
 
         wf = tmp_path / ".github" / "workflows" / "giki-review.yml"
         assert not wf.exists()
+        assert not (tmp_path / ".github" / "workflows" / "giki-decay.yml").exists()
 
 
 class TestNextSteps:
@@ -178,3 +185,6 @@ class TestWithActionIdempotent:
         wf_path = tmp_path / ".github" / "workflows" / "giki-review.yml"
         assert wf_path.exists()
         assert "kept" in r2.stdout and str(wf_path) in r2.stdout
+        decay_path = tmp_path / ".github" / "workflows" / "giki-decay.yml"
+        assert decay_path.exists()
+        assert "kept" in r2.stdout and str(decay_path) in r2.stdout

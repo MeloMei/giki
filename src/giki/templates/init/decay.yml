@@ -1,0 +1,33 @@
+# giki decay — weekly knowledge decay audit
+#
+# Runs `giki decay` every Monday at 09:00 UTC and fails the job when any
+# page is assessed as high decay risk. Trigger manually anytime via
+# workflow_dispatch.
+#
+# Requirements:
+#   - giki-gitwiki >= 0.2.0 on PyPI (the first release with `giki decay`).
+#     Until it is published, replace the pip install line with:
+#       pip install "git+https://github.com/MeloMei/giki.git@main"
+#   - Secrets: ANTHROPIC_API_KEY (or OPENAI_API_KEY, matching .giki/config.yaml)
+#
+# Note: the gate covers the pages actually assessed (bounded by
+# --max-pages, default 20). Raise it for large wikis.
+
+name: giki decay
+on:
+  schedule:
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+jobs:
+  decay:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install "giki-gitwiki>=0.2.0"
+      - name: Run giki decay
+        run: giki decay --fail-on high --json
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

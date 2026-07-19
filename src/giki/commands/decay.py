@@ -2,9 +2,10 @@
 
 Scans every page for time-sensitive signals (version references,
 time-relative phrases, page age), then asks the LLM to judge which claims
-may have gone stale. Prints a risk-sorted report. This is a report, not a
-gate: findings never affect the exit code (only environment errors like a
-missing wiki/ directory or broken config exit non-zero).
+may have gone stale. Prints a risk-sorted report. By default this is a
+report, not a gate; ``--fail-on high`` turns it into one (exit 1 when any
+page is high risk). Environment errors (missing wiki/, broken config)
+always exit non-zero.
 """
 
 from __future__ import annotations
@@ -57,8 +58,15 @@ def decay_command(
     all_pages: bool = typer.Option(
         False, "--all", help="Assess pages even without time-sensitive signals"
     ),
+    fail_on: str | None = typer.Option(
+        None,
+        "--fail-on",
+        help="Exit 1 when any page is assessed at this risk level (currently only 'high').",
+    ),
 ) -> None:
     """Report wiki pages whose claims may have gone stale."""
+    if fail_on is not None and fail_on != "high":
+        raise typer.BadParameter("--fail-on currently only accepts 'high'")
     root = root.resolve()
     wiki_dir = root / "wiki"
     if not wiki_dir.exists():
@@ -154,6 +162,10 @@ def decay_command(
         if usage.records:
             payload["usage"] = usage.payload(ledger_error)
         console.print_json(json_module.dumps(payload, indent=2, ensure_ascii=False))
+        if fail_on == "high" and any(a.risk == "high" for a in assessments):
+            n = sum(1 for a in assessments if a.risk == "high")
+            error(f"decay gate failed: {n} high-risk page(s) found")
+            raise typer.Exit(code=1)
         return
 
     # Human report.
@@ -188,3 +200,7 @@ def decay_command(
         if ledger is not None:
             lines.append(f"ledger: {ledger.relative_to(root)}")
         print_panel("\n".join(lines), title="LLM Usage")
+
+    if fail_on == "high" and high:
+        error(f"decay gate failed: {high} high-risk page(s) found")
+        raise typer.Exit(code=1)

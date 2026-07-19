@@ -72,7 +72,7 @@ giki review --base main
 giki decay
 ```
 
-每个页面得到风险评级（高/中/低）、具体的可疑声明和修复建议。这是报告而非门禁——把它接入定时任务，过时的页面就不会再被忽视。LLM 基于自己的训练知识做判断，请把结果当作需要核实的线索，而不是最终结论。
+每个页面得到风险评级（高/中/低）、具体的可疑声明和修复建议。LLM 基于自己的训练知识做判断，请把结果当作需要核实的线索，而不是最终结论。要把它变成门禁，`giki decay --fail-on high` 会在发现高风险页面时非零退出——`giki init --with-action` 会帮你生成每周一次的 GitHub Actions 腐化审查。
 
 **在 Obsidian 里浏览结果：**
 
@@ -134,12 +134,12 @@ pricing:
 
 | 命令 | 作用 |
 |---|---|
-| `giki init [--with-action]` | 初始化知识库。加 `--with-action` 会生成 GitHub Actions 自动审查。 |
+| `giki init [--with-action]` | 初始化知识库。加 `--with-action` 会生成 GitHub Actions：PR 自动审查 + 每周腐化审查。 |
 | `giki ingest <path...> [--branch NAME] [--yes]` | 把源文档编译成 wiki 页面。 |
 | `giki review [--base BRANCH] [--pr N] [--json]` | 两阶段审查：机械检查 + LLM 语义分析。 |
 | `giki lint [--fix]` | 检查 wiki 健康：断链、孤立页、frontmatter 问题。`--fix` 自动修复。 |
 | `giki usage [--root PATH] [--since DATE\|Nd] [--json] [--budget USD]` | 查看本地账本中的累计 LLM 用量和估算成本。`--budget` 超预算时非零退出。 |
-| `giki decay [--json] [--max-pages N] [--min-age-days N] [--all]` | 扫描 wiki 中可能已过时的声明（知识腐化报告）。 |
+| `giki decay [--json] [--max-pages N] [--min-age-days N] [--all] [--fail-on high]` | 扫描 wiki 中可能已过时的声明（知识腐化报告）。 |
 | `giki config show \| set <key> <value>` | 查看或修改配置。 |
 | `giki mcp-serve` | 启动 MCP 服务器，供平台集成。 |
 

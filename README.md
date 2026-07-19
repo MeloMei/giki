@@ -72,7 +72,7 @@ Pages go stale silently — versions get superseded, APIs deprecated, "latest" s
 giki decay
 ```
 
-Each page gets a risk rating (high/medium/low) with the specific stale claims and how to fix them. It's a report, not a gate — wire it into a scheduled job and stale pages stop going unnoticed. The LLM judges from its own training knowledge, so treat findings as leads to verify, not verdicts.
+Each page gets a risk rating (high/medium/low) with the specific stale claims and how to fix them. The LLM judges from its own training knowledge, so treat findings as leads to verify, not verdicts. To run it as a gate, `giki decay --fail-on high` exits non-zero when any page is high risk — `giki init --with-action` scaffolds a weekly GitHub Actions decay audit for you.
 
 **Browse the result in Obsidian:**
 
@@ -134,12 +134,12 @@ Works with Claude, GPT, Ollama, and any OpenAI-compatible endpoint.
 
 | Command | What it does |
 |---|---|
-| `giki init [--with-action]` | Scaffold a knowledge base. Add `--with-action` for GitHub Actions auto-review on PR. |
+| `giki init [--with-action]` | Scaffold a knowledge base. Add `--with-action` for GitHub Actions: auto-review on PR + weekly decay audit. |
 | `giki ingest <path...> [--branch NAME] [--yes]` | Compile source documents into wiki pages. |
 | `giki review [--base BRANCH] [--pr N] [--json]` | Run two-phase review: mechanical checks + LLM semantic analysis. |
 | `giki lint [--fix]` | Check wiki health: dead links, orphans, frontmatter issues. `--fix` auto-repairs. |
 | `giki usage [--root PATH] [--since DATE\|Nd] [--json] [--budget USD]` | Cumulative LLM usage and estimated cost from the local ledger. `--budget` exits non-zero when over budget. |
-| `giki decay [--json] [--max-pages N] [--min-age-days N] [--all]` | Scan the wiki for claims that may have gone stale (knowledge decay report). |
+| `giki decay [--json] [--max-pages N] [--min-age-days N] [--all] [--fail-on high]` | Scan the wiki for claims that may have gone stale (knowledge decay report). |
 | `giki config show \| set <key> <value>` | View or update config. |
 | `giki mcp-serve` | Start MCP server for platform integration. |
 
